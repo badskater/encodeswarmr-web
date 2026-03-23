@@ -1,0 +1,66 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="HDR & Analysis">
+  <h1>HDR & Analysis</h1>
+  <p>
+    EncodeSwarmr includes built-in media analysis capabilities powered by FFmpeg. When a source is registered, analysis jobs are automatically queued.
+  </p>
+
+  <h2>HDR Metadata Detection</h2>
+  <p>EncodeSwarmr automatically detects and preserves HDR metadata across the following formats:</p>
+
+  <table>
+    <thead>
+      <tr><th>Format</th><th>Detection</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>HDR10</td><td>Static metadata (mastering display, content light level)</td><td>SMPTE ST 2086</td></tr>
+      <tr><td>HDR10+</td><td>Dynamic metadata extraction</td><td>Samsung standard</td></tr>
+      <tr><td>Dolby Vision</td><td>Profile detection (5, 7, 8.1, 8.4)</td><td>RPU extraction</td></tr>
+      <tr><td>HLG</td><td>Transfer characteristics detection</td><td>BT.2100</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    HDR metadata is automatically passed through to encoding templates, ensuring that output files maintain the correct color space and dynamic range information.
+  </p>
+
+  <h2>VMAF Quality Analysis</h2>
+  <p>
+    EncodeSwarmr can run VMAF (Video Multi-Method Assessment Fusion) quality analysis to compare encoded output against the source:
+  </p>
+  <ul>
+    <li>Configurable VMAF model (default: vmaf_v0.6.1)</li>
+    <li>Per-frame and aggregate scores</li>
+    <li>Results stored in the database and visible in the web UI</li>
+    <li>Can be triggered automatically after encoding or on-demand</li>
+  </ul>
+
+  <h2>Scene Detection</h2>
+  <p>
+    For chunked encoding workflows, EncodeSwarmr performs scene detection to determine optimal split points:
+  </p>
+  <ul>
+    <li>FFmpeg-based scene change detection</li>
+    <li>Configurable threshold for scene sensitivity</li>
+    <li>Ensures chunks split at scene boundaries for better quality</li>
+    <li>Split points are cached to avoid re-analysis</li>
+  </ul>
+
+  <h2>Analysis Pipeline</h2>
+  <p>When a source is registered, the following analysis jobs are queued automatically:</p>
+  <ol>
+    <li><strong>Probe</strong> — Extract container/codec metadata via FFprobe</li>
+    <li><strong>HDR Detection</strong> — Identify HDR format and extract metadata</li>
+    <li><strong>Scene Detection</strong> (optional) — Find scene boundaries for chunked encoding</li>
+  </ol>
+  <p>Analysis results are stored and used by the template engine when generating encoding scripts.</p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/webhooks">Webhooks</a> — Get notified when analysis completes</li>
+    <li><a href="/docs/configuration">Configuration</a> — Analysis-related settings</li>
+  </ul>
+</DocsLayout>

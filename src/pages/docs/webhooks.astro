@@ -1,0 +1,86 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Webhooks">
+  <h1>Webhooks</h1>
+  <p>
+    EncodeSwarmr can send notifications to external services when events occur. Webhooks support Discord, Microsoft Teams, and Slack with HMAC-SHA256 signature verification.
+  </p>
+
+  <h2>Supported Providers</h2>
+  <table>
+    <thead>
+      <tr><th>Provider</th><th>Format</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Discord</td><td>Discord webhook embeds</td></tr>
+      <tr><td>Microsoft Teams</td><td>Adaptive Cards</td></tr>
+      <tr><td>Slack</td><td>Block Kit messages</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Configuration</h2>
+  <p>Add webhooks to your <code>controller.yaml</code>:</p>
+  <pre><code>webhooks:
+  - name: discord-alerts
+    url: https://discord.com/api/webhooks/123/abc
+    provider: discord
+    secret: my-hmac-secret
+    events:
+      - job.completed
+      - job.failed
+      - agent.offline
+  - name: slack-ops
+    url: https://hooks.slack.com/services/T.../B.../xxx
+    provider: slack
+    secret: another-secret
+    events:
+      - job.failed
+      - agent.offline</code></pre>
+
+  <h2>Available Events</h2>
+  <table>
+    <thead>
+      <tr><th>Event</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>job.queued</code></td><td>A new job has been added to the queue</td></tr>
+      <tr><td><code>job.started</code></td><td>An agent has started processing a job</td></tr>
+      <tr><td><code>job.completed</code></td><td>A job finished successfully</td></tr>
+      <tr><td><code>job.failed</code></td><td>A job failed after all retries</td></tr>
+      <tr><td><code>agent.online</code></td><td>An agent connected to the Controller</td></tr>
+      <tr><td><code>agent.offline</code></td><td>An agent lost connectivity</td></tr>
+      <tr><td><code>analysis.completed</code></td><td>Source analysis finished</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Signature Verification</h2>
+  <p>
+    Each webhook delivery includes an <code>X-EncodeSwarmr-Signature</code> header containing an HMAC-SHA256 signature of the request body using your configured secret. Verify this signature on the receiving end to ensure authenticity.
+  </p>
+  <pre><code># Signature format:
+# X-EncodeSwarmr-Signature: sha256=&lt;hex-encoded-hmac&gt;
+
+# Verification pseudocode:
+expected = hmac_sha256(secret, request_body)
+assert signature == "sha256=" + hex(expected)</code></pre>
+
+  <h2>Retry Delivery</h2>
+  <p>
+    Failed webhook deliveries are retried with exponential backoff. The retry schedule:
+  </p>
+  <ul>
+    <li>1st retry: 30 seconds</li>
+    <li>2nd retry: 2 minutes</li>
+    <li>3rd retry: 10 minutes</li>
+    <li>4th retry: 1 hour</li>
+    <li>After 4 failures, the delivery is marked as failed</li>
+  </ul>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/ha">High Availability</a> — Production deployment patterns</li>
+    <li><a href="/docs/api">API Reference</a> — Webhook management endpoints</li>
+  </ul>
+</DocsLayout>

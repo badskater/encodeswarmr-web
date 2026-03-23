@@ -1,0 +1,125 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="API Reference">
+  <h1>API Reference</h1>
+  <p>
+    EncodeSwarmr provides a REST API at <code>/api/v1</code> with an OpenAPI 3.1 specification available at <code>/api/v1/openapi.json</code>. The API uses JSON request/response bodies and follows RFC 9457 (Problem Details) for error responses.
+  </p>
+
+  <h2>Authentication</h2>
+  <p>The API supports three authentication methods:</p>
+  <ul>
+    <li><strong>Session cookie</strong> — Set after login via the web UI</li>
+    <li><strong>API key</strong> — Passed via <code>Authorization: Bearer &lt;api-key&gt;</code> header</li>
+    <li><strong>OIDC token</strong> — JWT from your identity provider</li>
+  </ul>
+
+  <h2>Core Endpoints</h2>
+
+  <h3>Sources</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/sources</code></td><td>List all registered sources</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/sources</code></td><td>Register a new source</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/sources/&#123;id&#125;</code></td><td>Get source details</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/v1/sources/&#123;id&#125;</code></td><td>Remove a source</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Jobs</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/jobs</code></td><td>List jobs (cursor-paginated)</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/jobs</code></td><td>Create a new encoding job</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/jobs/&#123;id&#125;</code></td><td>Get job details and progress</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/jobs/&#123;id&#125;/cancel</code></td><td>Cancel a running job</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/jobs/&#123;id&#125;/retry</code></td><td>Retry a failed job</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Agents</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/agents</code></td><td>List all agents</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/agents/&#123;id&#125;</code></td><td>Get agent details</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/agents/&#123;id&#125;/disable</code></td><td>Disable an agent</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/agents/&#123;id&#125;/upgrade</code></td><td>Push upgrade to agent</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Presets</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/presets</code></td><td>List encoding presets</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/presets</code></td><td>Create a preset</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/v1/presets/&#123;id&#125;</code></td><td>Update a preset</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/v1/presets/&#123;id&#125;</code></td><td>Delete a preset</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Pagination</h2>
+  <p>
+    List endpoints use cursor-based pagination to avoid OFFSET drift on large datasets:
+  </p>
+  <pre><code>GET /api/v1/jobs?limit=50&cursor=eyJpZCI6MTAwfQ==</code></pre>
+  <p>
+    Responses include a <code>next_cursor</code> field. Pass it as the <code>cursor</code> query parameter to fetch the next page.
+  </p>
+
+  <h2>Error Format</h2>
+  <p>Errors follow RFC 9457 (Problem Details for HTTP APIs):</p>
+  <pre><code>&#123;
+  "type": "https://encodeswarmr.dev/errors/not-found",
+  "title": "Resource Not Found",
+  "status": 404,
+  "detail": "Job with ID 'abc123' was not found",
+  "instance": "/api/v1/jobs/abc123"
+&#125;</code></pre>
+
+  <h2>Rate Limiting</h2>
+  <p>
+    The API enforces rate limits of 200 requests/second per IP with a burst allowance of 400. Rate limit headers are included in responses:
+  </p>
+  <ul>
+    <li><code>X-RateLimit-Limit</code> — Maximum requests per second</li>
+    <li><code>X-RateLimit-Remaining</code> — Remaining requests in the window</li>
+    <li><code>X-RateLimit-Reset</code> — Unix timestamp when the limit resets</li>
+  </ul>
+
+  <h2>WebSocket Events</h2>
+  <p>
+    Connect to <code>/api/v1/ws</code> for real-time updates. Events include:
+  </p>
+  <ul>
+    <li><code>job.progress</code> — Encoding progress updates (percentage, fps, ETA)</li>
+    <li><code>job.completed</code> / <code>job.failed</code> — Job state changes</li>
+    <li><code>agent.online</code> / <code>agent.offline</code> — Agent connectivity changes</li>
+    <li><code>agent.heartbeat</code> — Periodic agent status updates</li>
+  </ul>
+
+  <h2>Generated Clients</h2>
+  <p>
+    Auto-generated TypeScript and Go clients are available in the <code>api/generated/</code> directory of the repository. Use <code>oapi-codegen</code> to regenerate:
+  </p>
+  <pre><code>make generate-api</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/webhooks">Webhooks</a> — Set up external notifications</li>
+    <li><a href="/docs/hdr">HDR & Analysis</a> — Media analysis capabilities</li>
+  </ul>
+</DocsLayout>

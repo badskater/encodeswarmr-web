@@ -1,0 +1,88 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Agents">
+  <h1>Agent Management</h1>
+  <p>
+    Agents are the worker nodes that perform encoding jobs. They connect to the Controller over gRPC with mTLS and can run on Windows or Linux.
+  </p>
+
+  <h2>Agent Enrollment</h2>
+  <p>
+    Agents use enrollment tokens for zero-touch registration. Generate tokens from the Controller web UI under <strong>Settings &gt; Agents &gt; Enrollment Tokens</strong> or via the API:
+  </p>
+  <pre><code>POST /api/v1/agents/enrollment-tokens
+&#123;
+  "label": "datacenter-01",
+  "expires_at": "2026-04-01T00:00:00Z"
+&#125;</code></pre>
+
+  <p>Then install the agent with the token:</p>
+  <pre><code>encodeswarmr-agent install \
+  --controller https://controller:9443 \
+  --token &lt;enrollment-token&gt;</code></pre>
+
+  <h2>GPU Auto-Detection</h2>
+  <p>
+    On startup, agents probe for available GPU encoders:
+  </p>
+  <table>
+    <thead>
+      <tr><th>Vendor</th><th>Encoder</th><th>Detection Method</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>NVIDIA</td><td>NVENC</td><td>NVML / nvidia-smi</td></tr>
+      <tr><td>Intel</td><td>QSV</td><td>VA-API / Media SDK probe</td></tr>
+      <tr><td>AMD</td><td>AMF</td><td>AMF runtime probe</td></tr>
+    </tbody>
+  </table>
+  <p>
+    GPU capabilities are reported to the Controller and used for job assignment. You can override auto-detection in the agent config if needed.
+  </p>
+
+  <h2>Offline Resilience</h2>
+  <p>
+    Each agent maintains a local SQLite journal. If the agent loses connectivity to the Controller:
+  </p>
+  <ul>
+    <li>In-progress jobs continue to completion</li>
+    <li>Results are buffered in the local SQLite journal</li>
+    <li>The agent retries connection with exponential backoff (5s to 5m)</li>
+    <li>On reconnect, buffered results sync automatically</li>
+  </ul>
+
+  <h2>Self-Upgrade</h2>
+  <p>
+    The Controller can push binary upgrades to agents. The upgrade process:
+  </p>
+  <ol>
+    <li>Controller publishes a new version with SHA-256 checksum</li>
+    <li>Agent downloads the new binary and verifies the checksum</li>
+    <li>Agent replaces its own binary and restarts the service</li>
+    <li>If the new version fails health checks, it rolls back automatically</li>
+  </ol>
+
+  <h2>Monitoring</h2>
+  <p>
+    Agent status is visible in the web UI dashboard. Each agent reports:
+  </p>
+  <ul>
+    <li>Online/offline status with last heartbeat timestamp</li>
+    <li>Current job (if any) with real-time progress</li>
+    <li>GPU utilization and temperature</li>
+    <li>System resource usage (CPU, memory, disk)</li>
+    <li>Software version and uptime</li>
+  </ul>
+
+  <h2>Remote Desktop Proxy</h2>
+  <p>
+    EncodeSwarmr includes an optional VNC/noVNC proxy for remote access to agent hosts directly from the web UI. This is useful for debugging encoding issues or checking GPU driver status without SSH/RDP.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/configuration">Configuration Reference</a> — Agent configuration options</li>
+    <li><a href="/docs/api">API Reference</a> — Agent management endpoints</li>
+  </ul>
+</DocsLayout>

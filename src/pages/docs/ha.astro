@@ -1,0 +1,90 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="High Availability">
+  <h1>High Availability</h1>
+  <p>
+    EncodeSwarmr supports active-passive high availability for production deployments that require fault tolerance.
+  </p>
+
+  <h2>Controller HA</h2>
+  <p>
+    Controller HA uses PostgreSQL advisory locks to ensure only one instance is actively processing jobs at any time. The setup:
+  </p>
+  <ol>
+    <li>Deploy two or more Controller instances pointing to the same PostgreSQL database</li>
+    <li>One instance acquires the advisory lock and becomes the <strong>active</strong> leader</li>
+    <li>Other instances remain in <strong>standby</strong>, serving only read-only API requests</li>
+    <li>If the active instance fails, a standby acquires the lock and becomes active</li>
+  </ol>
+
+  <h3>Configuration</h3>
+  <pre><code>ha:
+  enabled: true
+  lock_refresh_interval: 5s   # How often to refresh the advisory lock
+  lock_timeout: 30s           # How long before a stale lock is considered expired</code></pre>
+
+  <h2>Database HA</h2>
+  <p>
+    For database-level high availability, EncodeSwarmr recommends Patroni with pgBouncer:
+  </p>
+  <ul>
+    <li><strong>Patroni</strong> — Manages PostgreSQL replication and automatic failover</li>
+    <li><strong>pgBouncer</strong> — Connection pooling to handle failover transparently</li>
+  </ul>
+
+  <p>Point the Controller's database configuration at the pgBouncer endpoint. Patroni handles failover automatically.</p>
+
+  <h2>Load Balancing</h2>
+  <p>
+    Place a load balancer (nginx, HAProxy, or cloud LB) in front of Controller instances:
+  </p>
+  <ul>
+    <li><strong>HTTP traffic</strong> (port 8080) — Round-robin or least-connections to any instance</li>
+    <li><strong>gRPC traffic</strong> (port 9443) — Route to the active instance only</li>
+    <li>Use the <code>/health</code> endpoint for health checks</li>
+  </ul>
+
+  <h3>Health Check Response</h3>
+  <pre><code>GET /health
+
+# Active instance:
+&#123;"status": "ok", "role": "active", "version": "1.0.0"&#125;
+
+# Standby instance:
+&#123;"status": "ok", "role": "standby", "version": "1.0.0"&#125;</code></pre>
+
+  <h2>Agent Resilience</h2>
+  <p>
+    Agents are inherently resilient to Controller failover:
+  </p>
+  <ul>
+    <li>gRPC connections automatically reconnect with exponential backoff</li>
+    <li>In-progress jobs continue during failover</li>
+    <li>Results buffer in the local SQLite journal until connectivity is restored</li>
+    <li>No manual intervention required on the agent side</li>
+  </ul>
+
+  <h2>Deployment Architecture</h2>
+  <pre><code>                    Load Balancer
+                    ┌──────────┐
+                    │ nginx/LB │
+                    └────┬─────┘
+                ┌────────┼────────┐
+          ┌─────┴─────┐     ┌────┴──────┐
+          │Controller 1│     │Controller 2│
+          │  (active)  │     │ (standby)  │
+          └─────┬──────┘     └─────┬──────┘
+                └────────┬─────────┘
+              ┌──────────┴──────────┐
+              │ PostgreSQL (Patroni) │
+              │   Primary + Replica  │
+              └──────────────────────┘</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/configuration">Configuration Reference</a> — All HA-related settings</li>
+    <li><a href="/docs/agents">Agent Management</a> — Agent behavior during failover</li>
+  </ul>
+</DocsLayout>

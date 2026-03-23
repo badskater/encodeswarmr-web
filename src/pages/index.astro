@@ -1,0 +1,423 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="EncodeSwarmr - Distributed Video Encoding">
+  <!-- Hero Section -->
+  <section class="relative overflow-hidden pt-32 pb-20 lg:pt-40 lg:pb-32">
+    <div class="absolute inset-0 -z-10">
+      <div class="absolute top-1/4 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-primary-600/10 blur-3xl"></div>
+      <div class="absolute top-1/3 right-1/4 h-[400px] w-[400px] rounded-full bg-accent-600/10 blur-3xl"></div>
+    </div>
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="mx-auto max-w-4xl text-center">
+        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-4 py-1.5 text-sm text-primary-300">
+          <span class="inline-block h-2 w-2 rounded-full bg-primary-400 animate-pulse"></span>
+          v1.0.0 — Now Available
+        </div>
+        <h1 class="text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl">
+          Distributed Video
+          <span class="bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
+            Encoding
+          </span>
+          at Scale
+        </h1>
+        <p class="mx-auto mt-6 max-w-2xl text-lg text-surface-200 sm:text-xl">
+          Orchestrate GPU-accelerated video encoding across multiple machines.
+          Queue jobs, monitor progress, and scale your pipeline — all from a single dashboard.
+        </p>
+        <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <a href="#quickstart" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 font-medium text-white transition-colors hover:bg-primary-500">
+            Get Started
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a href="https://github.com/badskater/encodeswarmr" class="inline-flex items-center gap-2 rounded-lg border border-surface-700 px-6 py-3 font-medium text-surface-200 transition-colors hover:border-surface-500 hover:text-white" target="_blank" rel="noopener">
+            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+
+      <!-- Terminal Preview -->
+      <div class="mx-auto mt-16 max-w-3xl">
+        <div class="overflow-hidden rounded-xl border border-surface-700 bg-surface-900 shadow-2xl">
+          <div class="flex items-center gap-2 border-b border-surface-700 px-4 py-3">
+            <div class="h-3 w-3 rounded-full bg-red-500/80"></div>
+            <div class="h-3 w-3 rounded-full bg-yellow-500/80"></div>
+            <div class="h-3 w-3 rounded-full bg-green-500/80"></div>
+            <span class="ml-2 text-xs text-surface-200">Terminal</span>
+          </div>
+          <div class="p-6 font-mono text-sm leading-relaxed">
+            <p><span class="text-green-400">$</span> <span class="text-white">docker compose up -d</span></p>
+            <p class="mt-1 text-surface-200">[+] Running 3/3</p>
+            <p class="text-surface-200"> &#10004; postgres   <span class="text-green-400">Started</span></p>
+            <p class="text-surface-200"> &#10004; controller <span class="text-green-400">Started</span></p>
+            <p class="mt-3"><span class="text-green-400">$</span> <span class="text-white">curl http://localhost:8080/health</span></p>
+            <p class="mt-1 text-primary-300">&#123;"status":"ok","version":"1.0.0","agents":3&#125;</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Strip -->
+  <section class="border-y border-surface-800 bg-surface-900/50">
+    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-6 py-12 md:grid-cols-4">
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">Go</div>
+        <div class="mt-1 text-sm text-surface-200">Single Binary</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">3</div>
+        <div class="mt-1 text-sm text-surface-200">GPU Vendors</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">gRPC</div>
+        <div class="mt-1 text-sm text-surface-200">mTLS Secured</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">HA</div>
+        <div class="mt-1 text-sm text-surface-200">Active-Passive</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-3xl font-bold text-white sm:text-4xl">Everything you need for distributed encoding</h2>
+        <p class="mt-4 text-lg text-surface-200">
+          From job orchestration to GPU management, EncodeSwarmr handles the complexity so you can focus on your content.
+        </p>
+      </div>
+
+      <div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-primary-500/10 p-3 text-primary-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Job Orchestration</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Priority FIFO queue with chunked encoding, auto-retry with exponential backoff, and cron-based recurring encodes.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-green-500/10 p-3 text-green-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">GPU Acceleration</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Auto-detects NVIDIA NVENC, Intel QSV, and AMD AMF hardware encoders. Supports x265, x264, SVT-AV1, and FFmpeg.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-accent-500/10 p-3 text-accent-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Offline Resilience</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Agents buffer results in a local SQLite journal during network outages. Results sync automatically when connectivity returns.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-yellow-500/10 p-3 text-yellow-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">HDR Support</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Automatic HDR metadata detection including HDR10, HDR10+, Dolby Vision with profile detection, and HLG.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-cyan-500/10 p-3 text-cyan-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Observability</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Prometheus metrics, Grafana dashboards, structured JSON logging, and real-time WebSocket event hub for live monitoring.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-red-500/10 p-3 text-red-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Auth & Access Control</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Local accounts, OIDC SSO with role mapping, and API key authentication. Three roles: viewer, operator, and admin.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-orange-500/10 p-3 text-orange-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Cloud Storage</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Use S3, Google Cloud Storage, or Azure Blob as source or destination alongside local UNC/NFS shares.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-pink-500/10 p-3 text-pink-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Webhooks</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Get notified via Discord, Microsoft Teams, or Slack when jobs complete. HMAC-SHA256 signed with retry delivery.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
+          <div class="mb-4 inline-flex rounded-lg bg-teal-500/10 p-3 text-teal-400">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Self-Upgrade</h3>
+          <p class="mt-2 text-sm text-surface-200">
+            Agents self-upgrade with SHA-256 verified binary downloads and automatic rollback. Zero-touch agent enrollment.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture Section -->
+  <section id="architecture" class="border-t border-surface-800 bg-surface-900/30 py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-3xl font-bold text-white sm:text-4xl">Architecture</h2>
+        <p class="mt-4 text-lg text-surface-200">
+          A Controller-Agent model with gRPC communication, PostgreSQL persistence, and a React dashboard.
+        </p>
+      </div>
+
+      <div class="mt-16 grid gap-12 lg:grid-cols-2">
+        <div class="overflow-hidden rounded-xl border border-surface-700 bg-surface-900 p-6 sm:p-8">
+          <pre class="overflow-x-auto font-mono text-xs leading-relaxed text-surface-200 sm:text-sm"><span class="text-primary-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+<span class="text-primary-400">&#9474;</span>         <span class="text-white font-bold">CONTROLLER</span>               <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9474;</span>                                     <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9474;</span>  <span class="text-cyan-400">REST API</span> (:8080)  <span class="text-green-400">gRPC</span> (:9443)  <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9474;</span>  <span class="text-yellow-400">React UI</span>          <span class="text-accent-400">WebSocket</span>      <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9474;</span>  <span class="text-pink-400">Webhooks</span>          <span class="text-orange-400">Scheduler</span>      <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9474;</span>                                     <span class="text-primary-400">&#9474;</span>
+<span class="text-primary-400">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
+             <span class="text-primary-400">&#9474;</span>           <span class="text-primary-400">&#9474;</span>
+      <span class="text-surface-200">PostgreSQL</span>    <span class="text-green-400">gRPC + mTLS</span>
+             <span class="text-primary-400">&#9474;</span>           <span class="text-primary-400">&#9474;</span>
+     <span class="text-primary-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>     <span class="text-primary-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+     <span class="text-primary-400">&#9474;</span>           <span class="text-primary-400">&#9474;</span>                  <span class="text-primary-400">&#9474;</span>
+<span class="text-accent-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9488;</span>   <span class="text-green-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>  <span class="text-green-400">&#9484;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+<span class="text-accent-400">&#9474;</span> <span class="text-white">DB</span>     <span class="text-accent-400">&#9474;</span>   <span class="text-green-400">&#9474;</span> <span class="text-white">Agent 1</span>    <span class="text-green-400">&#9474;</span>  <span class="text-green-400">&#9474;</span> <span class="text-white">Agent N</span>    <span class="text-green-400">&#9474;</span>
+<span class="text-accent-400">&#9474;</span> <span class="text-surface-200">PG 16</span>  <span class="text-accent-400">&#9474;</span>   <span class="text-green-400">&#9474;</span> <span class="text-surface-200">GPU:NVENC</span>  <span class="text-green-400">&#9474;</span>  <span class="text-green-400">&#9474;</span> <span class="text-surface-200">GPU:QSV</span>    <span class="text-green-400">&#9474;</span>
+<span class="text-accent-400">&#9474;</span>        <span class="text-accent-400">&#9474;</span>   <span class="text-green-400">&#9474;</span> <span class="text-surface-200">SQLite &#9678;</span>  <span class="text-green-400">&#9474;</span>  <span class="text-green-400">&#9474;</span> <span class="text-surface-200">SQLite &#9678;</span>   <span class="text-green-400">&#9474;</span>
+<span class="text-accent-400">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>   <span class="text-green-400">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>  <span class="text-green-400">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span></pre>
+        </div>
+
+        <div class="space-y-6">
+          <div>
+            <h3 class="flex items-center gap-2 text-lg font-semibold text-white">
+              <span class="inline-block h-2 w-2 rounded-full bg-primary-400"></span>
+              Controller
+            </h3>
+            <p class="mt-2 text-sm text-surface-200">
+              Central orchestrator running as a single Go binary. Serves the REST API, React web UI, gRPC agent service, and WebSocket event hub. Manages the job queue, script generation, and coordinates analysis tasks (HDR detection, VMAF, scene detection).
+            </p>
+          </div>
+          <div>
+            <h3 class="flex items-center gap-2 text-lg font-semibold text-white">
+              <span class="inline-block h-2 w-2 rounded-full bg-green-400"></span>
+              Agents
+            </h3>
+            <p class="mt-2 text-sm text-surface-200">
+              Worker nodes that connect to the Controller over gRPC with mTLS. Execute encoding jobs using local GPU hardware. Maintain a SQLite journal for offline resilience — results buffer locally and sync when connectivity returns.
+            </p>
+          </div>
+          <div>
+            <h3 class="flex items-center gap-2 text-lg font-semibold text-white">
+              <span class="inline-block h-2 w-2 rounded-full bg-accent-400"></span>
+              Database
+            </h3>
+            <p class="mt-2 text-sm text-surface-200">
+              PostgreSQL 16+ stores jobs, agent state, results, and user data. Optional HA via Patroni + pgBouncer for production deployments requiring high availability.
+            </p>
+          </div>
+          <div>
+            <h3 class="flex items-center gap-2 text-lg font-semibold text-white">
+              <span class="inline-block h-2 w-2 rounded-full bg-yellow-400"></span>
+              API
+            </h3>
+            <p class="mt-2 text-sm text-surface-200">
+              OpenAPI 3.1 spec at <code class="rounded bg-surface-800 px-1.5 py-0.5 text-xs">/api/v1</code> with auto-generated TypeScript and Go clients. Rate limited at 200 req/s with ETag caching.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack Section -->
+  <section class="border-t border-surface-800 py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <h2 class="text-center text-3xl font-bold text-white sm:text-4xl">Tech Stack</h2>
+      <p class="mx-auto mt-4 max-w-2xl text-center text-lg text-surface-200">
+        Built on proven, production-ready technologies.
+      </p>
+
+      <div class="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">Go 1.25+</div>
+          <div class="mt-1 text-xs text-surface-200">Core language</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">gRPC</div>
+          <div class="mt-1 text-xs text-surface-200">Agent comms</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">PostgreSQL 16</div>
+          <div class="mt-1 text-xs text-surface-200">Primary DB</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">React 19</div>
+          <div class="mt-1 text-xs text-surface-200">Web UI</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">Vite 8</div>
+          <div class="mt-1 text-xs text-surface-200">Frontend build</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">Tailwind CSS</div>
+          <div class="mt-1 text-xs text-surface-200">Styling</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">Prometheus</div>
+          <div class="mt-1 text-xs text-surface-200">Metrics</div>
+        </div>
+        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
+          <div class="font-semibold text-white">Docker</div>
+          <div class="mt-1 text-xs text-surface-200">Deployment</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start Section -->
+  <section id="quickstart" class="border-t border-surface-800 bg-surface-900/30 py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-3xl font-bold text-white sm:text-4xl">Quick Start</h2>
+        <p class="mt-4 text-lg text-surface-200">
+          Get up and running in minutes with Docker Compose.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-12 max-w-3xl space-y-8">
+        <div class="flex gap-4">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">1</div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-white">Clone and start the stack</h3>
+            <div class="mt-3 overflow-hidden rounded-lg border border-surface-700 bg-surface-900">
+              <div class="border-b border-surface-700 px-4 py-2">
+                <span class="text-xs text-surface-200">bash</span>
+              </div>
+              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code>git clone https://github.com/badskater/encodeswarmr.git
+cd encodeswarmr
+docker compose up -d</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">2</div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-white">Complete the setup wizard</h3>
+            <p class="mt-2 text-sm text-surface-200">
+              Open <code class="rounded bg-surface-800 px-1.5 py-0.5 text-xs">http://localhost:8080</code> in your browser. The setup wizard guides you through creating your admin account, configuring storage paths, and generating your first agent enrollment token.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">3</div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-white">Install agents on your encoding machines</h3>
+            <div class="mt-3 overflow-hidden rounded-lg border border-surface-700 bg-surface-900">
+              <div class="border-b border-surface-700 px-4 py-2">
+                <span class="text-xs text-surface-200">PowerShell / bash</span>
+              </div>
+              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code>encodeswarmr-agent install \
+  --controller https://&lt;ip&gt;:9443 \
+  --token &lt;enrollment-token&gt;</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-4">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">4</div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-white">Start encoding</h3>
+            <p class="mt-2 text-sm text-surface-200">
+              Register sources, create encoding presets, and queue jobs through the web UI or REST API. EncodeSwarmr handles distribution, monitoring, and concatenation automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-12 text-center">
+        <a href="/docs" class="inline-flex items-center gap-2 text-primary-400 transition-colors hover:text-primary-300">
+          Read the full documentation
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="border-t border-surface-800 py-24">
+    <div class="mx-auto max-w-7xl px-6 text-center">
+      <h2 class="text-3xl font-bold text-white sm:text-4xl">Ready to scale your encoding?</h2>
+      <p class="mx-auto mt-4 max-w-2xl text-lg text-surface-200">
+        EncodeSwarmr is open source and free to use under AGPL-3.0.
+      </p>
+      <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <a href="https://github.com/badskater/encodeswarmr" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-3 font-medium text-white transition-colors hover:bg-primary-500" target="_blank" rel="noopener">
+          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+          </svg>
+          Star on GitHub
+        </a>
+        <a href="/docs" class="inline-flex items-center gap-2 rounded-lg border border-surface-700 px-6 py-3 font-medium text-surface-200 transition-colors hover:border-surface-500 hover:text-white">
+          Browse Documentation
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>

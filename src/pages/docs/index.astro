@@ -1,0 +1,87 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Overview">
+  <h1>EncodeSwarmr Documentation</h1>
+  <p>
+    EncodeSwarmr is a distributed video encoding orchestration platform that coordinates GPU-accelerated encoding across multiple machines. It uses a Controller-Agent architecture where a central Controller manages job queuing, scheduling, and monitoring while Agents on remote machines perform the actual encoding work.
+  </p>
+
+  <h2>Key Concepts</h2>
+
+  <h3>Controller</h3>
+  <p>
+    The Controller is the central hub that runs as a single Go binary. It provides:
+  </p>
+  <ul>
+    <li>A REST API (<code>/api/v1</code>) for programmatic access</li>
+    <li>A React-based web dashboard for visual management</li>
+    <li>A gRPC service (port 9443) for agent communication over mTLS</li>
+    <li>A WebSocket event hub for real-time UI updates</li>
+    <li>Job queue management with priority FIFO scheduling</li>
+    <li>Script generation from templates (AviSynth/VapourSynth)</li>
+    <li>Media analysis coordination (HDR detection, VMAF, scene detection)</li>
+  </ul>
+
+  <h3>Agents</h3>
+  <p>
+    Agents are worker nodes installed on machines with GPU hardware. They:
+  </p>
+  <ul>
+    <li>Connect to the Controller over gRPC with mTLS encryption</li>
+    <li>Auto-detect GPU capabilities (NVIDIA NVENC, Intel QSV, AMD AMF)</li>
+    <li>Execute encoding jobs and stream real-time progress</li>
+    <li>Maintain a local SQLite journal for offline resilience</li>
+    <li>Support self-upgrade with SHA-256 verified binary downloads</li>
+  </ul>
+
+  <h3>Jobs</h3>
+  <p>
+    A job represents a single encoding task. Jobs flow through the system as follows:
+  </p>
+  <ol>
+    <li>A source is registered (local path or cloud storage URI)</li>
+    <li>Analysis jobs auto-queue (HDR detection, optional VMAF/scene detection)</li>
+    <li>An encoding job is created with a preset and destination</li>
+    <li>The Controller assigns the job to an available Agent</li>
+    <li>The Agent executes the encode and streams progress back</li>
+    <li>On completion, results are recorded and webhooks fire</li>
+  </ol>
+
+  <h2>System Requirements</h2>
+
+  <h3>Controller</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Requirement</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OS</td><td>Linux (Docker recommended)</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16+</td></tr>
+      <tr><td>Memory</td><td>512 MB minimum</td></tr>
+      <tr><td>Ports</td><td>8080 (HTTP), 9443 (gRPC)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Agents</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Requirement</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OS</td><td>Windows Server / Windows 10+ / Linux</td></tr>
+      <tr><td>GPU</td><td>NVIDIA, Intel, or AMD with encoding support</td></tr>
+      <tr><td>Network</td><td>Outbound access to Controller on port 9443</td></tr>
+      <tr><td>Storage</td><td>Access to media shares (UNC/NFS)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/installation">Installation Guide</a> — Set up the Controller and your first Agent</li>
+    <li><a href="/docs/configuration">Configuration Reference</a> — All configuration options explained</li>
+    <li><a href="/docs/agents">Agent Management</a> — Enrollment, upgrades, and monitoring</li>
+    <li><a href="/docs/api">API Reference</a> — REST API endpoints and usage</li>
+  </ul>
+</DocsLayout>
