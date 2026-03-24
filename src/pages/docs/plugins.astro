@@ -1,0 +1,148 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Plugin System">
+  <h1>Plugin System</h1>
+  <p>
+    EncodeSwarmr uses a plugin architecture for encoding backends. Each plugin wraps an encoder binary (or library) and exposes a standard interface so the Controller and Agents can invoke any codec uniformly. Plugins are compiled into the agent binary; custom plugins require rebuilding the agent.
+  </p>
+
+  <h2>Built-in Plugins</h2>
+  <table>
+    <thead>
+      <tr><th>Plugin ID</th><th>Encoder Binary</th><th>Output Container</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>x265</code></td><td><code>x265</code> / <code>ffmpeg -c:v libx265</code></td><td>MKV, MP4</td><td>Software H.265/HEVC encoder; best quality-per-bit for CPU encoding</td></tr>
+      <tr><td><code>x264</code></td><td><code>x264</code> / <code>ffmpeg -c:v libx264</code></td><td>MKV, MP4</td><td>Software H.264/AVC encoder; maximum compatibility</td></tr>
+      <tr><td><code>svt-av1</code></td><td><code>SvtAv1EncApp</code> / <code>ffmpeg -c:v libsvtav1</code></td><td>MKV, WebM</td><td>SVT-AV1 open-source AV1 encoder; best CPU AV1 throughput</td></tr>
+      <tr><td><code>ffmpeg-copy</code></td><td><code>ffmpeg</code></td><td>Any</td><td>Stream-copy without re-encoding; used for remux, audio-only, and subtitle jobs</td></tr>
+    </tbody>
+  </table>
+
+  <h2>API Endpoints</h2>
+
+  <h3>List Plugins</h3>
+  <p><code>GET /api/v1/plugins</code></p>
+  <p>Returns all registered plugins and their current enabled state:</p>
+  <pre><code>&#123;
+  "plugins": [
+    &#123;
+      "id": "x265",
+      "name": "x265",
+      "version": "3.5+35-06b9036b6",
+      "enabled": true,
+      "capabilities": ["hdr", "10bit", "12bit", "dolby-vision"]
+    &#125;,
+    &#123;
+      "id": "x264",
+      "name": "x264",
+      "version": "0.164.3094",
+      "enabled": true,
+      "capabilities": ["8bit"]
+    &#125;,
+    &#123;
+      "id": "svt-av1",
+      "name": "SVT-AV1",
+      "version": "1.8.0",
+      "enabled": true,
+      "capabilities": ["10bit", "hdr"]
+    &#125;,
+    &#123;
+      "id": "ffmpeg-copy",
+      "name": "FFmpeg Stream Copy",
+      "version": "6.1.1",
+      "enabled": true,
+      "capabilities": ["copy"]
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h3>Enable / Disable a Plugin</h3>
+  <p><code>PUT /api/v1/plugins/:id</code></p>
+  <p>Request body:</p>
+  <pre><code>&#123;
+  "enabled": false
+&#125;</code></pre>
+  <p>Disabling a plugin prevents new jobs from being assigned to that codec. In-flight jobs using the plugin complete normally. Returns <code>204 No Content</code> on success.</p>
+
+  <h2>Web UI</h2>
+  <p>Navigate to <strong>Settings → Plugins</strong> to see a card for each registered plugin. Each card shows the plugin ID, detected binary version, a list of capabilities, and an enable/disable toggle. Changes take effect immediately without an agent restart.</p>
+
+  <h2>Plugin Registry (Backend)</h2>
+  <p>The Go plugin registry is defined in <code>internal/plugin/registry.go</code>. Each plugin implements the <code>Encoder</code> interface:</p>
+  <pre><code>// internal/plugin/registry.go
+type Encoder interface &#123;
+    ID()           string
+    Name()         string
+    Version()      (string, error)
+    Capabilities() []string
+    BuildArgs(job *Job, preset *Preset) ([]string, error)
+    Validate(job *Job) error
+&#125;
+
+type Registry struct &#123;
+    mu      sync.RWMutex
+    plugins map[string]Encoder
+    enabled map[string]bool
+&#125;</code></pre>
+
+  <h3>Registry Methods</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Register</code></td><td><code>Register(e Encoder)</code></td><td>Register a plugin; panics if ID already registered</td></tr>
+      <tr><td><code>Get</code></td><td><code>Get(id string) (Encoder, bool)</code></td><td>Retrieve a plugin by ID</td></tr>
+      <tr><td><code>List</code></td><td><code>List() []Encoder</code></td><td>Return all registered plugins in registration order</td></tr>
+      <tr><td><code>SetEnabled</code></td><td><code>SetEnabled(id string, v bool) error</code></td><td>Enable or disable a plugin at runtime</td></tr>
+      <tr><td><code>IsEnabled</code></td><td><code>IsEnabled(id string) bool</code></td><td>Check whether a plugin is currently enabled</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Adding Custom Plugins</h2>
+  <p>Create a new Go file in <code>internal/plugin/</code> implementing the <code>Encoder</code> interface, then register it in the agent's <code>init()</code> block:</p>
+  <pre><code>// internal/plugin/vvenc.go
+package plugin
+
+import "fmt"
+
+type VVEncPlugin struct&#123;&#125;
+
+func (v *VVEncPlugin) ID()   string &#123; return "vvenc" &#125;
+func (v *VVEncPlugin) Name() string &#123; return "VVenC H.266/VVC" &#125;
+
+func (v *VVEncPlugin) Version() (string, error) &#123;
+    // exec vvencapp --version and parse output
+    return execVersion("vvencapp", "--version")
+&#125;
+
+func (v *VVEncPlugin) Capabilities() []string &#123;
+    return []string&#123;"10bit", "hdr"&#125;
+&#125;
+
+func (v *VVEncPlugin) BuildArgs(job *Job, preset *Preset) ([]string, error) &#123;
+    return []string&#123;
+        "-i", job.InputPath,
+        "--preset", preset.Speed,
+        "-q", fmt.Sprintf("%d", preset.QP),
+        "-o", job.OutputPath,
+    &#125;, nil
+&#125;
+
+func (v *VVEncPlugin) Validate(job *Job) error &#123; return nil &#125;
+
+func init() &#123;
+    DefaultRegistry.Register(&amp;VVEncPlugin&#123;&#125;)
+&#125;</code></pre>
+  <p>Rebuild the agent binary with <code>go build ./cmd/agent/...</code> and redeploy. The new plugin will appear in the Settings → Plugins list and become available for use in encoding presets.</p>
+
+  <h2>Future Plans</h2>
+  <ul>
+    <li>Dynamic plugin loading via Go plugin (<code>.so</code>) files without requiring a full rebuild</li>
+    <li>NVENC, QSV, and AMF GPU encoder plugins surfaced as first-class built-ins</li>
+    <li>Plugin marketplace UI for discovering and installing community-contributed plugins</li>
+    <li>Per-plugin capability flags exposed to the preset editor for codec-specific options</li>
+  </ul>
+</DocsLayout>

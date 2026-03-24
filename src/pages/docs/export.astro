@@ -1,0 +1,176 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Job Export & Archival">
+  <h1>Job Export &amp; Archival</h1>
+  <p>
+    EncodeSwarmr provides two related mechanisms for dealing with historical job data: <strong>archival</strong> automatically moves completed jobs out of the active database after a retention period, and <strong>export</strong> lets you download job history as CSV or JSON for reporting, billing, and auditing.
+  </p>
+
+  <h2>Archival</h2>
+
+  <h3>How It Works</h3>
+  <p>
+    The Controller runs a background archival worker on a configurable schedule. The worker queries for jobs that have been in a terminal state (<code>completed</code>, <code>failed</code>, or <code>cancelled</code>) for longer than the configured retention period. Qualifying jobs are:
+  </p>
+  <ol>
+    <li>Serialised to JSON and written to the configured archive storage location (local filesystem or S3-compatible bucket).</li>
+    <li>Soft-deleted from the active <code>jobs</code> table (the row is retained with an <code>archived_at</code> timestamp and a reference to the archive file).</li>
+    <li>Excluded from the default job list API response, but still accessible via the <code>archived=true</code> query parameter.</li>
+  </ol>
+
+  <h3>Retention Configuration</h3>
+  <pre><code>archival:
+  enabled: true
+  retention_days: 90            # jobs older than this are archived
+  run_interval: 24h             # how often the archival worker runs
+  storage: local                # "local" or "s3"
+  local_path: /var/lib/encodeswarmr/archive
+  s3:
+    bucket: my-archive-bucket
+    prefix: encodeswarmr/jobs/
+    region: us-east-1
+    access_key_id: ""           # leave blank to use instance IAM role
+    secret_access_key: ""</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Enable the archival worker</td></tr>
+      <tr><td><code>retention_days</code></td><td>int</td><td><code>90</code></td><td>Jobs in terminal state older than this many days are archived</td></tr>
+      <tr><td><code>run_interval</code></td><td>duration</td><td><code>24h</code></td><td>How often the archival worker scans for eligible jobs</td></tr>
+      <tr><td><code>storage</code></td><td>string</td><td><code>local</code></td><td><code>local</code> writes to the filesystem; <code>s3</code> writes to an S3-compatible bucket</td></tr>
+      <tr><td><code>local_path</code></td><td>string</td><td>—</td><td>Directory where archive JSON files are written (storage: local)</td></tr>
+      <tr><td><code>s3.bucket</code></td><td>string</td><td>—</td><td>S3 bucket name (storage: s3)</td></tr>
+      <tr><td><code>s3.prefix</code></td><td>string</td><td>—</td><td>Key prefix for archive objects</td></tr>
+      <tr><td><code>s3.region</code></td><td>string</td><td>—</td><td>AWS region for the bucket</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Accessing Archived Jobs</h3>
+  <p>Archived jobs remain queryable via the API using the <code>archived</code> query parameter:</p>
+  <pre><code># List only archived jobs:
+GET /api/v1/jobs?archived=true&amp;page=1&amp;per_page=50
+
+# List both active and archived:
+GET /api/v1/jobs?archived=all
+
+# Retrieve a specific archived job by ID:
+GET /api/v1/jobs/job-abc123
+# (archived jobs are always accessible by ID regardless of the archived param)</code></pre>
+
+  <h2>Export</h2>
+
+  <h3>GET /api/v1/jobs/export</h3>
+  <p>Download job history in CSV or JSON format. All query filters supported by the job list endpoint are also supported here.</p>
+
+  <h4>Query Parameters</h4>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>format</code></td><td>string</td><td><code>csv</code> (default) or <code>json</code></td></tr>
+      <tr><td><code>from</code></td><td>ISO 8601 date</td><td>Include jobs created on or after this date (e.g. <code>2025-01-01</code>)</td></tr>
+      <tr><td><code>to</code></td><td>ISO 8601 date</td><td>Include jobs created on or before this date</td></tr>
+      <tr><td><code>status</code></td><td>string</td><td>Filter by job status: <code>completed</code>, <code>failed</code>, <code>cancelled</code>, or <code>all</code></td></tr>
+      <tr><td><code>template_id</code></td><td>string</td><td>Filter by template ID</td></tr>
+      <tr><td><code>user_id</code></td><td>string</td><td>Filter by submitting user ID (admin only)</td></tr>
+      <tr><td><code>archived</code></td><td>bool</td><td>Include archived jobs (<code>true</code>), exclude them (<code>false</code>, default), or include both (<code>all</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>CSV Format Columns</h4>
+  <p>The CSV export includes the following columns in order:</p>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>Job UUID</td></tr>
+      <tr><td><code>name</code></td><td>Human-readable job name</td></tr>
+      <tr><td><code>status</code></td><td>Final status of the job</td></tr>
+      <tr><td><code>template_id</code></td><td>Encoding template used</td></tr>
+      <tr><td><code>submitted_by</code></td><td>Username of the submitting user</td></tr>
+      <tr><td><code>created_at</code></td><td>ISO 8601 UTC timestamp</td></tr>
+      <tr><td><code>completed_at</code></td><td>ISO 8601 UTC timestamp (empty if not completed)</td></tr>
+      <tr><td><code>duration_seconds</code></td><td>Wall-clock encoding time</td></tr>
+      <tr><td><code>source_duration_seconds</code></td><td>Duration of the source material</td></tr>
+      <tr><td><code>output_size_bytes</code></td><td>File size of the output</td></tr>
+      <tr><td><code>agent_id</code></td><td>ID of the agent that completed the job</td></tr>
+      <tr><td><code>error_category</code></td><td>Error classification (empty if succeeded)</td></tr>
+      <tr><td><code>retry_count</code></td><td>Number of retry attempts made</td></tr>
+    </tbody>
+  </table>
+
+  <h4>JSON Format Example</h4>
+  <pre><code>GET /api/v1/jobs/export?format=json&amp;from=2025-01-01&amp;to=2025-03-31
+Authorization: Bearer &lt;token&gt;
+
+# Response 200 OK (application/json):
+&#123;
+  "exported_at": "2025-04-01T00:00:00Z",
+  "total_jobs": 2,
+  "jobs": [
+    &#123;
+      "id": "job-abc123",
+      "name": "Feature Film Encode",
+      "status": "completed",
+      "template_id": "hevc-4k-hdr",
+      "submitted_by": "alice",
+      "created_at": "2025-03-15T09:00:00Z",
+      "completed_at": "2025-03-15T10:32:00Z",
+      "duration_seconds": 5520,
+      "source_duration_seconds": 7200,
+      "output_size_bytes": 8589934592,
+      "agent_id": "agent-x1y2",
+      "error_category": null,
+      "retry_count": 0
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h4>Response Headers</h4>
+  <table>
+    <thead>
+      <tr><th>Header</th><th>Value (CSV)</th><th>Value (JSON)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Content-Type</code></td><td><code>text/csv; charset=utf-8</code></td><td><code>application/json</code></td></tr>
+      <tr><td><code>Content-Disposition</code></td><td><code>attachment; filename="jobs-export-2025-04-01.csv"</code></td><td><code>attachment; filename="jobs-export-2025-04-01.json"</code></td></tr>
+      <tr><td><code>X-Total-Count</code></td><td colspan="2">Total number of jobs in the export</td></tr>
+    </tbody>
+  </table>
+
+  <h2>UI Walkthrough</h2>
+  <ol>
+    <li>Navigate to <strong>Jobs</strong> in the main navigation.</li>
+    <li>Apply any filters you want (date range, status, template, user).</li>
+    <li>Click the <strong>Export</strong> button in the top-right of the job list.</li>
+    <li>Choose <strong>CSV</strong> or <strong>JSON</strong> from the format selector.</li>
+    <li>Toggle <strong>Include archived jobs</strong> if you want historical data beyond the active retention window.</li>
+    <li>Click <strong>Download</strong>. The browser will download the file immediately; no email or background job is needed for exports under 50,000 rows.</li>
+    <li>For exports exceeding 50,000 rows, the UI will prompt you to confirm and will generate the file asynchronously, notifying you via email when it is ready for download.</li>
+  </ol>
+
+  <h2>Storage Considerations</h2>
+  <p>
+    Archive files are stored as newline-delimited JSON (one job object per line) with gzip compression. File names follow the pattern <code>&#123;year&#125;/&#123;month&#125;/jobs-&#123;date&#125;-&#123;batch&#125;.ndjson.gz</code>.
+  </p>
+  <p>
+    For the S3 storage backend, the Controller uses multipart upload for large batches and applies the <code>STANDARD_IA</code> storage class by default, which is cost-effective for infrequently accessed archive data. You can override the storage class in the configuration:
+  </p>
+  <pre><code>archival:
+  s3:
+    storage_class: GLACIER_IR   # override to Glacier Instant Retrieval</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/template-versioning">Template Versioning</a> — Version and revert encoding templates</li>
+    <li><a href="/docs/estimation">Cost &amp; Time Estimation</a> — Pre-flight estimates for new jobs</li>
+    <li><a href="/docs/api">API Reference</a> — Full job and export endpoint documentation</li>
+  </ul>
+</DocsLayout>

@@ -1,88 +1,549 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
 ---
-
-<DocsLayout title="Agents">
-  <h1>Agent Management</h1>
+<DocsLayout title="Agent Specification">
+  <h1>Agent Specification</h1>
   <p>
-    Agents are the worker nodes that perform encoding jobs. They connect to the Controller over gRPC with mTLS and can run on Windows or Linux.
+    This document is the authoritative technical reference for the EncodeSwarmr Agent. It covers installation, configuration, internal state machine, offline operation, task execution, GPU management, security, logging, and the upgrade strategy.
+  </p>
+  <p>
+    Agents are the worker processes that accept encoding jobs from the Controller, execute them using local encoder binaries, and stream progress back over gRPC with mTLS. Agents run on both Windows Server and Linux and are designed to survive controller connectivity loss without losing work.
   </p>
 
-  <h2>Agent Enrollment</h2>
+  <h2>Overview</h2>
   <p>
-    Agents use enrollment tokens for zero-touch registration. Generate tokens from the Controller web UI under <strong>Settings &gt; Agents &gt; Enrollment Tokens</strong> or via the API:
+    Each agent is a single statically-linked Go binary with no external runtime dependencies (CGO is disabled). On startup it:
   </p>
-  <pre><code>POST /api/v1/agents/enrollment-tokens
-&#123;
-  "label": "datacenter-01",
-  "expires_at": "2026-04-01T00:00:00Z"
+  <ol>
+    <li>Loads <code>agent.yaml</code> and merges any environment variable overrides.</li>
+    <li>Opens (or creates) its local SQLite offline journal.</li>
+    <li>Probes for GPU hardware if <code>gpu.enabled: true</code>.</li>
+    <li>Dials the controller over mTLS, presenting its client certificate for mutual authentication.</li>
+    <li>Registers itself and waits for administrator approval.</li>
+    <li>Once approved, enters the polling loop and accepts job assignments.</li>
+  </ol>
+
+  <h2>Installation &amp; Configuration</h2>
+
+  <h3>Windows — Prerequisites</h3>
+  <table>
+    <thead>
+      <tr><th>Requirement</th><th>Minimum</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Windows Server</td><td>2019 (1809)</td><td>2022 recommended; Windows 10/11 supported for dev use</td></tr>
+      <tr><td>CPU</td><td>4 cores</td><td>8+ recommended for parallel encode jobs</td></tr>
+      <tr><td>RAM</td><td>8 GiB</td><td>16 GiB recommended when using GPU encoders</td></tr>
+      <tr><td>Disk (work_dir)</td><td>50 GiB free</td><td>Temporary encode workspace; SSD strongly recommended</td></tr>
+      <tr><td>Network</td><td>1 Gbps</td><td>10 Gbps recommended for large media files on NAS</td></tr>
+      <tr><td>GPU driver (NVIDIA)</td><td>531.x+</td><td>Required for NVENC hardware encoding</td></tr>
+      <tr><td>GPU driver (AMD)</td><td>23.Q1+</td><td>Required for AMF hardware encoding</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Windows — Service Installation</h3>
+  <pre><code># Run as Administrator
+
+# GUI installer (recommended for interactive setups)
+EncodeSwarmr-Agent-Setup.exe
+
+# Unattended / scripted install
+encodeswarmr-agent.exe install ^
+  --controller controller.example.com:9443 ^
+  --token &lt;enrollment-token&gt; ^
+  --work-dir "D:\EncodeWork" ^
+  --name "WIN-ENCODE-01"
+
+# Verify and start
+sc query EncodeSwarmrAgent
+net start EncodeSwarmrAgent
+
+# Uninstall
+net stop EncodeSwarmrAgent
+encodeswarmr-agent.exe uninstall</code></pre>
+
+  <h3>Linux — Prerequisites</h3>
+  <table>
+    <thead>
+      <tr><th>Requirement</th><th>Minimum</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Distribution</td><td>Debian 11 / Ubuntu 22.04 / RHEL 8 / Rocky 8</td><td>Any systemd-based distro with glibc 2.31+ works</td></tr>
+      <tr><td>CPU</td><td>4 cores</td><td>—</td></tr>
+      <tr><td>RAM</td><td>4 GiB</td><td>8 GiB recommended</td></tr>
+      <tr><td>Disk (work_dir)</td><td>50 GiB free</td><td>SSD recommended</td></tr>
+      <tr><td>ffmpeg</td><td>6.x+</td><td>Must be compiled with the encoders required by your templates</td></tr>
+      <tr><td>NVIDIA driver + CUDA</td><td>535+</td><td>Optional; required only for NVENC on Linux</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Linux — Service Installation</h3>
+  <pre><code># Download and run the convenience install script
+curl -fsSL https://github.com/badskater/encodeswarmr/releases/latest/download/install-agent.sh | sudo bash
+
+# Or install the package manually (Debian/Ubuntu)
+sudo dpkg -i encodeswarmr-agent_amd64.deb
+
+# Or on RHEL/Rocky
+sudo dnf install -y ./encodeswarmr-agent_amd64.rpm
+
+# Register with the controller (writes certs and agent.yaml)
+sudo encodeswarmr-agent register \
+  --controller controller.example.com:9443 \
+  --token &lt;enrollment-token&gt;
+
+# Enable and start
+sudo systemctl enable --now encodeswarmr-agent
+
+# Follow the log
+sudo journalctl -u encodeswarmr-agent -f</code></pre>
+
+  <h3>Full Configuration Reference</h3>
+  <p>See the <a href="/docs/configuration">Configuration Reference</a> page for the fully annotated <code>agent.yaml</code>. A minimal working example:</p>
+  <pre><code>controller:
+  address: "controller.example.com:9443"
+  tls:
+    cert: /etc/encodeswarmr/certs/agent.crt
+    key:  /etc/encodeswarmr/certs/agent.key
+    ca:   /etc/encodeswarmr/certs/ca.crt
+
+agent:
+  hostname: "linux-encode-01"
+  work_dir: /var/lib/encodeswarmr/work
+  log_dir:  /var/log/encodeswarmr
+  cleanup_on_success: true
+  keep_failed_work_dir: true
+
+tools:
+  ffmpeg:  /usr/local/bin/ffmpeg
+  ffprobe: /usr/local/bin/ffprobe
+
+gpu:
+  enabled: true
+  vendor:  auto
+
+allowed_shares:
+  - /mnt/nas/media
+
+logging:
+  level:  info
+  format: json</code></pre>
+
+  <h2>State Machine</h2>
+  <p>
+    The agent is modelled as an explicit finite state machine. Each state has a well-defined set of valid transitions. Invalid transitions (e.g. jumping from IDLE to REPORTING) are rejected with a panic in debug builds and a logged error in production.
+  </p>
+  <pre><code>
+  ┌──────────────────┐
+  │  INITIALISING    │  Load config → open SQLite → probe GPU
+  └────────┬─────────┘
+           │ success
+           ▼
+  ┌──────────────────┐
+  │  REGISTERING     │  Dial controller gRPC (mTLS handshake)
+  └────────┬─────────┘
+           │ connected
+           ▼
+  ┌──────────────────┐
+  │  PENDING         │  Awaiting administrator approval in UI
+  └────────┬─────────┘
+           │ approved
+           ▼
+  ┌──────────────────┐       connectivity lost
+  │  IDLE            │─────────────────────────────────────────┐
+  └────────┬─────────┘                                         │
+           │ job assigned                                      │
+           ▼                                                   │
+  ┌──────────────────┐                                         │
+  │  PREPARING       │  Validate paths, tools, work dir        │
+  └────────┬─────────┘                                         ▼
+           │ ready                               ┌──────────────────┐
+           ▼                                     │  OFFLINE         │
+  ┌──────────────────┐                           │                  │
+  │  ENCODING        │  Spawn encoder, stream    │  Journal buffers │
+  └────────┬─────────┘  progress via gRPC        │  state; back-off │
+           │ done                                │  reconnect loop  │
+           ▼                                     └────────┬─────────┘
+  ┌──────────────────┐                                    │ reconnected
+  │  REPORTING       │  Upload metadata, clean up         │
+  └────────┬─────────┘                                    │
+           │ complete                                      │
+           └──────────────────────► IDLE ◄────────────────┘
+
+  Error paths:
+    PREPARING  → IDLE  (validation failure; job returned to queue)
+    ENCODING   → IDLE  (encoder crash; job marked failed)
+    REPORTING  → IDLE  (upload failure; retried on reconnect)
+  </code></pre>
+
+  <h2>Offline Operation</h2>
+
+  <h3>Principles</h3>
+  <ul>
+    <li>An agent that loses connectivity to the controller continues encoding its current job to completion.</li>
+    <li>All state changes (job start, progress snapshots, job completion/failure) are written to the local SQLite journal before being sent to the controller.</li>
+    <li>On reconnect, the agent replays any unacknowledged journal entries to the controller in order.</li>
+    <li>The controller deduplicates replayed events using the event UUID stored in the journal.</li>
+    <li>There is no data loss as long as the agent's disk is intact.</li>
+  </ul>
+
+  <h3>SQLite Journal Schema</h3>
+  <pre><code>-- Core event log: every state change is appended here.
+CREATE TABLE IF NOT EXISTS events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid        TEXT    NOT NULL UNIQUE,   -- idempotency key sent to controller
+    event_type  TEXT    NOT NULL,          -- job_started | progress | job_done | job_failed
+    job_id      TEXT    NOT NULL,
+    payload     BLOB    NOT NULL,          -- serialised protobuf EventPayload
+    created_at  INTEGER NOT NULL,          -- Unix timestamp (seconds)
+    synced_at   INTEGER                    -- NULL until acknowledged by controller
+);
+
+-- Checkpoint: last confirmed position per job for progress dedup.
+CREATE TABLE IF NOT EXISTS sync_checkpoints (
+    job_id          TEXT    PRIMARY KEY,
+    last_event_uuid TEXT    NOT NULL,
+    updated_at      INTEGER NOT NULL
+);
+
+-- Persisted job context so the agent can resume after a process restart.
+CREATE TABLE IF NOT EXISTS active_jobs (
+    job_id       TEXT    PRIMARY KEY,
+    assignment   BLOB    NOT NULL,         -- serialised protobuf JobAssignment
+    state        TEXT    NOT NULL,         -- PREPARING | ENCODING | REPORTING
+    pid          INTEGER,                  -- encoder process PID (NULL if not running)
+    started_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL
+);</code></pre>
+
+  <h3>Sync Flow</h3>
+  <pre><code>Agent reconnects to controller
+         │
+         ▼
+  Open gRPC SyncStream
+         │
+         ▼
+  SELECT * FROM events
+   WHERE synced_at IS NULL
+   ORDER BY id ASC
+         │
+         ▼  (for each unsynced event)
+  Send event to controller
+         │
+         ├── controller ACKs ──► UPDATE events SET synced_at = now() WHERE uuid = ?
+         │
+         └── controller NACKs ─► log warning; retry after back-off
+
+  After all events synced:
+         │
+         ▼
+  Resume normal operation (IDLE polling loop)</code></pre>
+
+  <h2>Task Execution Detail</h2>
+
+  <h3>Pre-Execution Validation</h3>
+  <p>Before spawning the encoder process, the agent validates:</p>
+  <ol>
+    <li><strong>Path whitelist check</strong> — every input and output path in the job assignment must be prefixed by an entry in <code>allowed_shares</code>. Jobs that fail this check are rejected and returned to the queue.</li>
+    <li><strong>Tool availability</strong> — the agent verifies that all binaries referenced by the encoding template (<code>ffmpeg</code>, <code>x265</code>, etc.) exist and are executable.</li>
+    <li><strong>Disk space</strong> — the agent checks that <code>work_dir</code> has at least 110% of the estimated output size free.</li>
+    <li><strong>GPU availability</strong> — if the template requests GPU encoding and the agent's GPU is busy or VRAM is exhausted, the job is returned to the queue for reassignment.</li>
+  </ol>
+
+  <h3>Script Location and Execution</h3>
+  <p>
+    The controller bundles the encode script inside the <code>JobAssignment</code> protobuf message. The agent writes it to a temporary file inside the job's work directory before execution.
+  </p>
+  <p>Protobuf message (simplified):</p>
+  <pre><code>message JobAssignment &#123;
+  string   job_id         = 1;
+  string   template_id    = 2;
+  string   input_path     = 3;
+  string   output_path    = 4;
+  bytes    script         = 5;  // raw encode script content
+  string   script_name    = 6;  // filename hint, e.g. "encode.bat" or "encode.sh"
+  map&lt;string,string&gt; variables = 7;  // template variable substitutions
+  GpuSpec  gpu            = 8;
+  int64    estimated_size_bytes = 9;
 &#125;</code></pre>
 
-  <p>Then install the agent with the token:</p>
-  <pre><code>encodeswarmr-agent install \
-  --controller https://controller:9443 \
-  --token &lt;enrollment-token&gt;</code></pre>
+  <h3>Job Working Directory Structure</h3>
+  <pre><code>&#123;work_dir&#125;/
+└── &#123;job_id&#125;/
+    ├── encode.bat          # (Windows) or encode.sh (Linux) — written by agent
+    ├── input/              # Symlink or junction to the source path
+    ├── output/             # Encoder writes output here; agent moves to output_path
+    ├── tmp/                # Intermediate files (e.g. x265 2-pass stats)
+    └── logs/
+        ├── stdout.log      # Encoder stdout
+        └── stderr.log      # Encoder stderr</code></pre>
 
-  <h2>GPU Auto-Detection</h2>
+  <h3>Process Execution (Go)</h3>
+  <pre><code>// Simplified from internal/agent/executor.go
+
+func (e *Executor) run(ctx context.Context, job *JobContext) error &#123;
+    scriptPath := filepath.Join(job.WorkDir, job.Assignment.ScriptName)
+    if err := os.WriteFile(scriptPath, job.Assignment.Script, 0700); err != nil &#123;
+        return fmt.Errorf("write script: %w", err)
+    &#125;
+
+    var cmd *exec.Cmd
+    switch runtime.GOOS &#123;
+    case "windows":
+        // Run inside cmd.exe with /D (disable AutoRun) and restricted environment
+        cmd = exec.CommandContext(ctx, "cmd.exe", "/D", "/C", scriptPath)
+    default:
+        cmd = exec.CommandContext(ctx, "/bin/bash", "-eu", scriptPath)
+    &#125;
+
+    cmd.Dir = job.WorkDir
+    cmd.Env = e.buildEnv(job)   // PATH + template variables only; no inherited env
+
+    stdoutPipe, _ := cmd.StdoutPipe()
+    stderrPipe, _ := cmd.StderrPipe()
+
+    if err := cmd.Start(); err != nil &#123;
+        return fmt.Errorf("start encoder: %w", err)
+    &#125;
+    job.PID = cmd.Process.Pid
+    e.journal.SavePID(job.JobID, job.PID)
+
+    go e.parseProgress(ctx, job, stdoutPipe)
+    go e.teeLog(job, stderrPipe, job.StderrLog)
+
+    return cmd.Wait()
+&#125;</code></pre>
+
+  <h3>Progress Parsing</h3>
   <p>
-    On startup, agents probe for available GPU encoders:
+    The agent parses encoder stdout in real time to extract progress metrics. Parsed values are sent to the controller via the gRPC <code>ReportProgress</code> stream and displayed in the web UI.
   </p>
   <table>
     <thead>
-      <tr><th>Vendor</th><th>Encoder</th><th>Detection Method</th></tr>
+      <tr><th>Encoder</th><th>Parsed Field</th><th>Pattern / Source</th></tr>
     </thead>
     <tbody>
-      <tr><td>NVIDIA</td><td>NVENC</td><td>NVML / nvidia-smi</td></tr>
-      <tr><td>Intel</td><td>QSV</td><td>VA-API / Media SDK probe</td></tr>
-      <tr><td>AMD</td><td>AMF</td><td>AMF runtime probe</td></tr>
+      <tr><td>ffmpeg</td><td>frame, fps, speed, time</td><td><code>frame=\s*(\d+).*fps=\s*([\d.]+).*time=([\d:.]+).*speed=\s*([\d.]+)x</code></td></tr>
+      <tr><td>x265</td><td>frames encoded, eta, bitrate</td><td><code>(\d+) frames.*eta\s+([\d:]+).*(\d+\.\d+)\s*kb/s</code></td></tr>
+      <tr><td>x264</td><td>frames, fps, eta</td><td><code>(\d+)/(\d+)\s+frames.*(\d+\.\d+)\s+fps.*eta\s+([\d:]+)</code></td></tr>
+      <tr><td>SVT-AV1</td><td>Encoding frame, fps</td><td><code>Encoding frame\s+(\d+).*(\d+\.\d+)\s+fps</code></td></tr>
     </tbody>
   </table>
   <p>
-    GPU capabilities are reported to the Controller and used for job assignment. You can override auto-detection in the agent config if needed.
+    Unrecognised output lines are written verbatim to <code>stdout.log</code> and streamed to the controller log tail, but do not cause progress parse failures.
   </p>
 
-  <h2>Offline Resilience</h2>
-  <p>
-    Each agent maintains a local SQLite journal. If the agent loses connectivity to the Controller:
-  </p>
-  <ul>
-    <li>In-progress jobs continue to completion</li>
-    <li>Results are buffered in the local SQLite journal</li>
-    <li>The agent retries connection with exponential backoff (5s to 5m)</li>
-    <li>On reconnect, buffered results sync automatically</li>
-  </ul>
+  <h2>GPU Detection &amp; Monitoring</h2>
 
-  <h2>Self-Upgrade</h2>
+  <h3>Detection</h3>
   <p>
-    The Controller can push binary upgrades to agents. The upgrade process:
+    When <code>gpu.vendor: auto</code>, the agent runs the following probes in order at startup. The first successful probe wins and sets the active vendor.
+  </p>
+  <pre><code>// Simplified from internal/agent/gpu/detect.go
+
+func Detect() (*GPUInfo, error) &#123;
+    // 1. NVIDIA — check for nvidia-smi or NVML
+    if info, err := probeNVIDIA(); err == nil &#123;
+        return info, nil
+    &#125;
+
+    // 2. AMD — check for amf-info or rocm-smi
+    if info, err := probeAMD(); err == nil &#123;
+        return info, nil
+    &#125;
+
+    // 3. Intel — check for vainfo (VA-API) or intel_gpu_top
+    if info, err := probeIntel(); err == nil &#123;
+        return info, nil
+    &#125;
+
+    return &GPUInfo&#123;Vendor: VendorNone&#125;, nil
+&#125;
+
+func probeNVIDIA() (*GPUInfo, error) &#123;
+    out, err := exec.Command("nvidia-smi",
+        "--query-gpu=name,memory.total,driver_version",
+        "--format=csv,noheader,nounits").Output()
+    if err != nil &#123;
+        return nil, err
+    &#125;
+    // parse CSV output ...
+    return info, nil
+&#125;
+
+func probeAMD() (*GPUInfo, error) &#123;
+    // Try AMF info tool first
+    out, err := exec.Command("amf-info").Output()
+    if err != nil &#123;
+        // Fall back to rocm-smi on Linux
+        out, err = exec.Command("rocm-smi", "--showmeminfo", "vram", "--json").Output()
+        if err != nil &#123;
+            return nil, err
+        &#125;
+    &#125;
+    // parse output ...
+    return info, nil
+&#125;
+
+func probeIntel() (*GPUInfo, error) &#123;
+    out, err := exec.Command("vainfo", "--display", "drm").Output()
+    if err != nil &#123;
+        return nil, err
+    &#125;
+    // parse output ...
+    return info, nil
+&#125;</code></pre>
+
+  <h3>Runtime Monitoring</h3>
+  <p>
+    During encoding the agent samples GPU metrics every <code>gpu.monitor_interval</code> (default 5s) and includes them in heartbeat payloads sent to the controller.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Vendor</th><th>Metric</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>NVIDIA</td><td>Utilisation %, VRAM used/total, temperature °C, power W</td><td><code>nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits</code></td></tr>
+      <tr><td>AMD</td><td>Utilisation %, VRAM used/total, temperature °C</td><td><code>rocm-smi --showuse --showmeminfo vram --showtemp --json</code> (Linux) / AMF SDK query (Windows)</td></tr>
+      <tr><td>Intel</td><td>Render engine utilisation %, memory used</td><td><code>intel_gpu_top -J -s 1000</code> (Linux) / IGCL SDK query (Windows)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Security</h2>
+
+  <h3>mTLS Bootstrap</h3>
+  <p>
+    Certificate issuance happens during the <code>register</code> command, before the agent service is started for the first time:
   </p>
   <ol>
-    <li>Controller publishes a new version with SHA-256 checksum</li>
-    <li>Agent downloads the new binary and verifies the checksum</li>
-    <li>Agent replaces its own binary and restarts the service</li>
-    <li>If the new version fails health checks, it rolls back automatically</li>
+    <li>The agent generates a 2048-bit RSA or P-256 ECDSA key pair locally.</li>
+    <li>It sends a Certificate Signing Request (CSR) to the controller's enrollment endpoint, authenticated by the one-time enrollment token.</li>
+    <li>The controller signs the CSR with its internal CA and returns the signed certificate plus the CA certificate.</li>
+    <li>The agent stores the certificate, key, and CA in its config directory. The enrollment token is discarded.</li>
+    <li>All subsequent gRPC connections use this certificate for mutual TLS. The controller verifies the agent certificate against the CA; the agent verifies the controller certificate against the same CA.</li>
   </ol>
-
-  <h2>Monitoring</h2>
   <p>
-    Agent status is visible in the web UI dashboard. Each agent reports:
+    Certificates have a configurable validity period (default 1 year). The agent automatically renews its certificate 30 days before expiry using the existing certificate for authentication.
+  </p>
+
+  <h3>UNC Path Validation (Go)</h3>
+  <pre><code>// internal/agent/security/paths.go
+
+// IsAllowedPath reports whether path is under one of the configured allowed shares.
+// It normalises both sides to prevent path traversal attacks.
+func IsAllowedPath(path string, allowedShares []string) bool &#123;
+    // Normalise separators and resolve any . or .. components.
+    // filepath.Clean does not resolve symlinks — symlink resolution
+    // is intentionally skipped to avoid TOCTOU races.
+    clean := filepath.Clean(path)
+
+    for _, share := range allowedShares &#123;
+        cleanShare := filepath.Clean(share)
+        // Require the path to start with the share AND be followed by
+        // a separator (or be exactly equal), preventing prefix spoofing
+        // where \\nas\media2 would match against \\nas\media.
+        if clean == cleanShare &#123;
+            return true
+        &#125;
+        prefix := cleanShare + string(filepath.Separator)
+        if strings.HasPrefix(clean, prefix) &#123;
+            return true
+        &#125;
+    &#125;
+    return false
+&#125;</code></pre>
+
+  <h3>Batch Script Sandboxing (Windows)</h3>
+  <p>
+    On Windows, encode scripts run inside <code>cmd.exe /D /C</code>. The <code>/D</code> flag disables <code>AutoRun</code> registry commands, preventing system-wide <code>HKLM\...\AutoRun</code> entries from injecting commands into the encoder process. The agent also strips the inherited environment and rebuilds it with only:
   </p>
   <ul>
-    <li>Online/offline status with last heartbeat timestamp</li>
-    <li>Current job (if any) with real-time progress</li>
-    <li>GPU utilization and temperature</li>
-    <li>System resource usage (CPU, memory, disk)</li>
-    <li>Software version and uptime</li>
+    <li><code>PATH</code> — limited to the tools directory and system32</li>
+    <li><code>TEMP</code> / <code>TMP</code> — set to the job's <code>tmp/</code> subdirectory</li>
+    <li>Template variables (e.g. <code>INPUT_PATH</code>, <code>OUTPUT_PATH</code>, <code>CRF</code>)</li>
   </ul>
+  <p>No user tokens, credentials, or network drive mappings are inherited by the encoder process.</p>
 
-  <h2>Remote Desktop Proxy</h2>
+  <h2>Logging &amp; Diagnostics</h2>
+
+  <h3>Task Logs</h3>
+  <table>
+    <thead>
+      <tr><th>File</th><th>Contents</th><th>Location</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>stdout.log</code></td><td>Full encoder stdout (progress lines + info messages)</td><td><code>&#123;log_dir&#125;/&#123;job_id&#125;/stdout.log</code></td></tr>
+      <tr><td><code>stderr.log</code></td><td>Full encoder stderr (warnings and errors)</td><td><code>&#123;log_dir&#125;/&#123;job_id&#125;/stderr.log</code></td></tr>
+      <tr><td><code>agent.log</code></td><td>Agent-level events for this job (state transitions, validation results)</td><td><code>&#123;log_dir&#125;/&#123;job_id&#125;/agent.log</code></td></tr>
+    </tbody>
+  </table>
   <p>
-    EncodeSwarmr includes an optional VNC/noVNC proxy for remote access to agent hosts directly from the web UI. This is useful for debugging encoding issues or checking GPU driver status without SSH/RDP.
+    All three files are also streamed to the controller in real time and accessible from the job detail page in the web UI without needing to SSH into the agent host.
   </p>
+
+  <h3>System Log (JSON format)</h3>
+  <p>The agent's main structured log (written to <code>&#123;log_dir&#125;/agent.log</code> and stdout of the systemd unit) uses the following JSON schema:</p>
+  <pre><code>&#123;
+  "time":    "2025-11-14T08:32:01.452Z",
+  "level":   "info",
+  "msg":     "job assigned",
+  "job_id":  "a3f8c1d2-...",
+  "agent":   "linux-encode-01",
+  "encoder": "ffmpeg",
+  "input":   "/mnt/nas/media/input/movie.mkv",
+  "output":  "/mnt/nas/media/output/movie.hevc.mkv"
+&#125;</code></pre>
+
+  <h3>Health Endpoint</h3>
+  <p>
+    The agent exposes a lightweight HTTP health endpoint on <code>localhost:8081</code> (not accessible from the network by default). The controller polls this from the same host during smoke tests and post-upgrade validation.
+  </p>
+  <pre><code>GET http://localhost:8081/health
+
+&#123;
+  "status":    "ok",
+  "version":   "1.2.3",
+  "uptime_s":  3721,
+  "state":     "ENCODING",
+  "job_id":    "a3f8c1d2-...",
+  "gpu": &#123;
+    "vendor":       "nvidia",
+    "util_pct":     87,
+    "vram_used_mb": 3412,
+    "vram_total_mb": 8192,
+    "temp_c":        71
+  &#125;
+&#125;</code></pre>
+
+  <h2>Upgrade Strategy</h2>
+  <p>
+    The controller can push a new agent binary to all (or selected) agents without manual intervention.
+  </p>
+  <ol>
+    <li>
+      <strong>Trigger</strong> — An administrator clicks <strong>Upgrade</strong> in the Agents UI, or calls <code>POST /api/v1/agents/&#123;id&#125;/upgrade</code>. The request specifies the target version.
+    </li>
+    <li>
+      <strong>Download</strong> — The agent downloads the new binary from the controller's internal artifact endpoint over the existing mTLS gRPC connection (no internet access required on the agent).
+    </li>
+    <li>
+      <strong>Verification</strong> — The agent verifies the SHA-256 checksum of the downloaded binary against the value published by the controller. If the checksum does not match, the upgrade is aborted and the event is logged.
+    </li>
+    <li>
+      <strong>Staged swap</strong> — The agent writes the new binary to <code>&#123;binary&#125;.new</code> next to the running binary, then sends itself a graceful shutdown signal. The service manager (Windows SCM or systemd) restarts the service, which now uses the new binary. On Linux, the service unit uses <code>ExecStartPre</code> to atomically <code>mv &#123;binary&#125;.new &#123;binary&#125;</code>.
+    </li>
+    <li>
+      <strong>Health check</strong> — After restart, the controller polls the agent's health endpoint. If the agent does not return <code>"status": "ok"</code> within 60 seconds, the controller marks the upgrade as failed and alerts the administrator. The agent itself does not auto-rollback; rollback is triggered manually via the UI or API.
+    </li>
+    <li>
+      <strong>Job safety</strong> — Upgrades are only initiated when the agent is in the <code>IDLE</code> state. If the agent is actively encoding, the upgrade request is queued and executed as soon as the current job completes.
+    </li>
+  </ol>
 
   <h2>Next Steps</h2>
   <ul>
-    <li><a href="/docs/configuration">Configuration Reference</a> — Agent configuration options</li>
+    <li><a href="/docs/configuration">Configuration Reference</a> — Full annotated <code>agent.yaml</code> and controller environment variables</li>
+    <li><a href="/docs/getting-started">Getting Started</a> — Quick install walkthrough</li>
     <li><a href="/docs/api">API Reference</a> — Agent management endpoints</li>
   </ul>
 </DocsLayout>

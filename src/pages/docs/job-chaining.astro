@@ -1,0 +1,193 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Job Chaining">
+  <h1>Job Chaining</h1>
+  <p>
+    Job chaining lets you express dependencies between encoding jobs so that one job only starts after one or more predecessor jobs have completed successfully. This is the foundation for multi-stage pipelines such as analyse → encode → normalise → merge.
+  </p>
+
+  <h2>Concepts</h2>
+
+  <h3>depends_on</h3>
+  <p>
+    Every job may carry a <code>depends_on</code> list — an array of job IDs that must reach the <code>completed</code> status before the current job is eligible for dispatch. A job with unsatisfied dependencies is placed in the <code>waiting</code> status and is invisible to agents until all predecessors finish.
+  </p>
+  <p>
+    Dependencies are checked by the Controller's scheduler on every status transition. When all listed predecessors complete, the dependent job transitions from <code>waiting</code> to <code>queued</code> and becomes eligible for agent pickup.
+  </p>
+
+  <h3>chain_group</h3>
+  <p>
+    A <code>chain_group</code> is a named, opaque label shared by all jobs in the same pipeline. It serves two purposes:
+  </p>
+  <ul>
+    <li>It lets you fetch all jobs belonging to a pipeline in a single API call (<code>GET /api/v1/job-chains/&#123;chain_group&#125;</code>).</li>
+    <li>It is the cancellation unit — cancelling a chain group cancels every non-terminal job that belongs to it.</li>
+  </ul>
+
+  <h2>Typical Workflow</h2>
+  <pre><code>┌─────────────┐
+│  Analysis   │  job_1  (MediaInfo + HDR detect)
+└──────┬──────┘
+       │ depends_on: []
+       ▼
+┌─────────────┐
+│   Encode    │  job_2  (ChunkedEncode with adaptive chunking)
+└──────┬──────┘
+       │ depends_on: [job_1]
+       ▼
+┌─────────────┐
+│    Audio    │  job_3  (LoudnessAnalyse → AudioNormalise)
+└──────┬──────┘
+       │ depends_on: [job_1]
+       ▼
+┌─────────────┐
+│    Merge    │  job_4  (AudioMerge + FileOutput)
+└─────────────┘
+       │ depends_on: [job_2, job_3]</code></pre>
+  <p>
+    Jobs 2 and 3 both depend only on job 1, so they can run in parallel once analysis completes. Job 4 waits for both jobs 2 and 3 before the merge step runs.
+  </p>
+
+  <h2>API Reference</h2>
+
+  <h3>Create a Job Chain</h3>
+  <pre><code>POST /api/v1/job-chains
+Content-Type: application/json
+
+&#123;
+  "chain_group": "movie-2024-encode",
+  "jobs": [
+    &#123;
+      "id": "job_1",
+      "name": "Analysis",
+      "flow": "analyse-hdr",
+      "source_id": "src_abc123",
+      "depends_on": []
+    &#125;,
+    &#123;
+      "id": "job_2",
+      "name": "Video Encode",
+      "flow": "encode-4k-hdr10",
+      "source_id": "src_abc123",
+      "depends_on": ["job_1"]
+    &#125;,
+    &#123;
+      "id": "job_3",
+      "name": "Audio Normalise",
+      "flow": "audio-r128",
+      "source_id": "src_abc123",
+      "depends_on": ["job_1"]
+    &#125;,
+    &#123;
+      "id": "job_4",
+      "name": "Merge",
+      "flow": "merge-output",
+      "source_id": "src_abc123",
+      "depends_on": ["job_2", "job_3"]
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <p>The Controller validates the dependency graph for cycles before persisting any jobs. A cyclic dependency returns <code>422 Unprocessable Entity</code>.</p>
+
+  <h3>Query Jobs in a Chain</h3>
+  <pre><code>GET /api/v1/job-chains/movie-2024-encode
+
+HTTP/1.1 200 OK
+&#123;
+  "chain_group": "movie-2024-encode",
+  "jobs": [
+    &#123; "id": "job_1", "name": "Analysis",        "status": "completed", "depends_on": [] &#125;,
+    &#123; "id": "job_2", "name": "Video Encode",    "status": "running",   "depends_on": ["job_1"] &#125;,
+    &#123; "id": "job_3", "name": "Audio Normalise", "status": "running",   "depends_on": ["job_1"] &#125;,
+    &#123; "id": "job_4", "name": "Merge",           "status": "waiting",   "depends_on": ["job_2", "job_3"] &#125;
+  ],
+  "overall_status": "running"
+&#125;</code></pre>
+
+  <h2>The <code>waiting</code> Status</h2>
+  <p>
+    A job in the <code>waiting</code> state is stored in the database but is invisible to agents. It transitions as follows:
+  </p>
+  <ul>
+    <li><code>waiting</code> → <code>queued</code> — All <code>depends_on</code> jobs have reached <code>completed</code>.</li>
+    <li><code>waiting</code> → <code>cancelled</code> — Any <code>depends_on</code> job reaches <code>failed</code> or <code>cancelled</code>, triggering auto-cancellation of the dependent (and all its transitive dependents).</li>
+  </ul>
+  <p>
+    Auto-cancellation cascades depth-first through the dependency graph so that no orphaned waiting job is left behind after a failure.
+  </p>
+
+  <h2>Dependency Resolution: UnblockDependentJobs</h2>
+  <p>
+    When a job transitions to <code>completed</code>, the Controller runs the <strong>UnblockDependentJobs</strong> procedure:
+  </p>
+  <ol>
+    <li>Query the database for all jobs whose <code>depends_on</code> list contains the just-completed job ID.</li>
+    <li>For each candidate, check whether every job in its <code>depends_on</code> list is now in the <code>completed</code> state.</li>
+    <li>If all dependencies are satisfied, atomically transition the candidate from <code>waiting</code> to <code>queued</code>.</li>
+    <li>Emit a <code>job.queued</code> event so that any idle agent polling the queue picks up the newly eligible job immediately.</li>
+  </ol>
+  <p>
+    The procedure is idempotent and runs inside a serialisable transaction to prevent double-dispatch under concurrent completions.
+  </p>
+
+  <h2>UI: CreateJobChain Wizard</h2>
+  <p>
+    The web UI provides a five-step wizard at <strong>Jobs &gt; New Chain</strong>:
+  </p>
+  <ol>
+    <li><strong>Name &amp; Group</strong> — Enter a human-readable name for the chain and optionally specify a custom <code>chain_group</code> identifier. If left blank, a UUID is generated.</li>
+    <li><strong>Add Jobs</strong> — Click <strong>+ Add Step</strong> for each job in the pipeline. For each step, choose a flow and a source.</li>
+    <li><strong>Define Dependencies</strong> — A visual DAG editor lets you draw dependency arrows between steps. The UI prevents cycles in real time.</li>
+    <li><strong>Agent Tags &amp; Priority</strong> — Optionally pin steps to specific agent tag sets or set relative priorities.</li>
+    <li><strong>Review &amp; Submit</strong> — A summary table shows all steps with their dependency chains. Click <strong>Submit Chain</strong> to create all jobs atomically.</li>
+  </ol>
+
+  <h2>Supported Audio Codecs</h2>
+  <p>
+    The following audio codecs are available in encoding nodes within a job chain flow:
+  </p>
+  <table>
+    <thead>
+      <tr><th>Preset Name</th><th>Category</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>aac_stereo</code></td><td>AAC</td><td>2-channel AAC-LC at 192 kbps. Broad device compatibility.</td></tr>
+      <tr><td><code>aac_51</code></td><td>AAC</td><td>5.1 AAC-LC at 384 kbps.</td></tr>
+      <tr><td><code>aac_he</code></td><td>AAC</td><td>HE-AAC for low-bitrate streaming. Stereo at 64 kbps.</td></tr>
+      <tr><td><code>opus_stereo</code></td><td>Opus</td><td>Opus stereo at 128 kbps. Recommended for web delivery.</td></tr>
+      <tr><td><code>opus_51</code></td><td>Opus</td><td>Opus 5.1 at 256 kbps.</td></tr>
+      <tr><td><code>ac3_51</code></td><td>Dolby AC-3</td><td>AC-3 5.1 at 448 kbps. Standard for Blu-ray compatibility.</td></tr>
+      <tr><td><code>eac3_51</code></td><td>Dolby E-AC-3</td><td>E-AC-3 (Dolby Digital Plus) 5.1 at 384 kbps.</td></tr>
+      <tr><td><code>eac3_atmos</code></td><td>Dolby Atmos</td><td>E-AC-3 JOC with Atmos metadata. Requires Atmos-capable source.</td></tr>
+      <tr><td><code>dts_core</code></td><td>DTS</td><td>DTS core 5.1 at 1509 kbps.</td></tr>
+      <tr><td><code>dts_hd_ma</code></td><td>DTS-HD</td><td>DTS-HD Master Audio lossless. Requires lossless input.</td></tr>
+      <tr><td><code>truehd_atmos</code></td><td>Dolby TrueHD</td><td>TrueHD with Atmos object metadata. Lossless; large file overhead.</td></tr>
+      <tr><td><code>flac_stereo</code></td><td>FLAC</td><td>Lossless FLAC stereo. Archive/mezzanine use.</td></tr>
+      <tr><td><code>pcm_stereo</code></td><td>PCM</td><td>Uncompressed 24-bit PCM stereo. Mezzanine or editing use only.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Cancellation Behaviour</h2>
+  <p>
+    Cancelling a chain group cancels all jobs in that group that are not already in a terminal state (<code>completed</code>, <code>failed</code>, <code>cancelled</code>). Jobs that are currently <code>running</code> receive a cancel signal; the agent stops encoding, cleans up temporary chunk files, and reports <code>cancelled</code> back to the Controller.
+  </p>
+  <p>
+    You can also cancel a single job within a chain. If the cancelled job has dependents that are still <code>waiting</code>, they are auto-cancelled via the cascade described above. If the cancelled job has no dependents in <code>waiting</code> state, only the target job is affected.
+  </p>
+
+  <h2>Error Handling</h2>
+  <p>
+    When a job in a chain fails, the following behaviour applies:
+  </p>
+  <ul>
+    <li>The failing job transitions to <code>failed</code> with an error reason and FFmpeg stderr excerpt stored in the job record.</li>
+    <li>All jobs whose <code>depends_on</code> list includes the failed job — and all transitive dependents — are auto-cancelled.</li>
+    <li>Jobs in parallel branches that do not depend on the failing job continue to run unaffected.</li>
+    <li>A <code>chain.failed</code> webhook event is emitted for the chain group if any job reaches <code>failed</code>.</li>
+    <li>Retrying the failed job (via <code>POST /api/v1/jobs/&#123;id&#125;/retry</code>) resets it and its cancelled dependents to <code>waiting</code> / <code>queued</code> as appropriate, restarting the cascade from that point.</li>
+  </ul>
+</DocsLayout>

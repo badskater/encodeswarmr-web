@@ -1,0 +1,127 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Output Validation">
+  <h1>Output Validation</h1>
+  <p>
+    After an agent finishes encoding, EncodeSwarmr optionally runs a validation pass against the output file using <code>ffprobe</code> before marking the job as complete. Validation catches common encoding errors that ffmpeg may not report as a non-zero exit code, such as a missing audio track or a drastically shorter-than-expected file.
+  </p>
+
+  <h2>What Gets Validated</h2>
+  <table>
+    <thead>
+      <tr><th>Check</th><th>Description</th><th>Configurable</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>File exists</td><td>Output file is present and non-empty at the expected path</td><td>No (always run)</td></tr>
+      <tr><td>Video stream present</td><td>At least one video stream is detected by ffprobe</td><td>Yes (<code>require_video_stream</code>)</td></tr>
+      <tr><td>Duration ratio</td><td>Output duration is within a configurable ratio of the source duration</td><td>Yes (<code>duration_ratio_min</code>)</td></tr>
+      <tr><td>Minimum file size</td><td>Output file is larger than a configurable minimum byte count</td><td>Yes (<code>min_size_bytes</code>)</td></tr>
+      <tr><td>No corrupt frames</td><td>ffprobe reports zero decode errors in the first N frames</td><td>Yes (<code>frame_check_count</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Configuration</h2>
+  <p>Add the <code>validation</code> block to <code>controller.yaml</code>:</p>
+  <pre><code>validation:
+  enabled: true
+  ffprobe_path: /usr/bin/ffprobe   # path to the ffprobe binary on each agent
+  require_video_stream: true
+  duration_ratio_min: 0.95         # output must be at least 95% of source duration
+  min_size_bytes: 102400           # 100 KiB minimum output size
+  frame_check_count: 100           # check first 100 frames for decode errors</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>enabled</code></td><td>bool</td><td><code>true</code></td><td>Master switch for output validation</td></tr>
+      <tr><td><code>ffprobe_path</code></td><td>string</td><td><code>ffprobe</code></td><td>Absolute path to ffprobe; defaults to PATH lookup</td></tr>
+      <tr><td><code>require_video_stream</code></td><td>bool</td><td><code>true</code></td><td>Fail validation if no video stream is found in the output</td></tr>
+      <tr><td><code>duration_ratio_min</code></td><td>float</td><td><code>0.95</code></td><td>Minimum acceptable ratio of output duration to source duration</td></tr>
+      <tr><td><code>min_size_bytes</code></td><td>int</td><td><code>102400</code></td><td>Minimum acceptable output file size in bytes</td></tr>
+      <tr><td><code>frame_check_count</code></td><td>int</td><td><code>100</code></td><td>Number of frames to probe for decode errors (0 to disable)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Validation Behaviour on Failure</h2>
+  <p>When one or more validation checks fail, the following sequence occurs:</p>
+  <ol>
+    <li>The agent reports a validation failure to the Controller, including which check(s) failed and the raw ffprobe output.</li>
+    <li>The Controller classifies the failure as a <strong>transient</strong> error (allowing retry) unless the same validation check has failed on every previous attempt, in which case it is reclassified as <strong>permanent</strong>.</li>
+    <li>The job is retried according to the intelligent retry policy. The output file from the failed attempt is deleted from the output destination before the next attempt begins.</li>
+    <li>If all retry attempts are exhausted with validation still failing, the job is marked as <code>failed</code> with error category <code>permanent</code> and the operator is alerted.</li>
+  </ol>
+
+  <h2>Per-Job Override</h2>
+  <p>You can override validation settings on a per-job basis at submission time:</p>
+  <pre><code>POST /api/v1/jobs
+Content-Type: application/json
+
+&#123;
+  "name": "audio-only-transcode",
+  "source": "s3://bucket/podcast.mp3",
+  "template_id": "aac-192k",
+  "validation": &#123;
+    "require_video_stream": false,
+    "duration_ratio_min": 0.98,
+    "min_size_bytes": 50000,
+    "frame_check_count": 0
+  &#125;
+&#125;</code></pre>
+  <p>Per-job settings take precedence over the global <code>controller.yaml</code> configuration. To disable validation entirely for a single job, set <code>"enabled": false</code> in the per-job <code>validation</code> object.</p>
+
+  <h2>ffprobe Binary</h2>
+  <p>
+    Validation runs <code>ffprobe</code> on the agent machine, not on the Controller. This means ffprobe must be installed on every agent host. The binary path is configured per-agent in <code>agent.yaml</code> and can also be set globally in <code>controller.yaml</code> as a default for agents that do not override it:
+  </p>
+  <pre><code># agent.yaml
+validation:
+  ffprobe_path: /usr/local/bin/ffprobe</code></pre>
+  <p>
+    The agent reports its ffprobe version to the Controller at registration time. The Controller logs a warning if an agent's ffprobe version is older than the minimum supported version (currently 4.3).
+  </p>
+
+  <h2>Interaction with Adaptive Chunking</h2>
+  <p>
+    When <a href="/docs/adaptive-chunking">Adaptive Chunking</a> is enabled, each segment is validated individually as it is completed, rather than validating the final merged output only. This provides faster feedback on encoding problems and avoids merging a partially corrupt segment set.
+  </p>
+  <p>
+    The duration ratio check is applied to each segment individually: the expected segment duration is derived from the chunk plan, and the actual segment duration must fall within <code>duration_ratio_min</code> of that value. The final merged file is also validated after assembly.
+  </p>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>ffprobe not found</h3>
+  <p>If an agent logs <code>validation: ffprobe not found at /usr/bin/ffprobe</code>:</p>
+  <ul>
+    <li>Install ffmpeg/ffprobe on the agent: <code>apt install ffmpeg</code> or <code>brew install ffmpeg</code>.</li>
+    <li>Or update <code>ffprobe_path</code> in <code>agent.yaml</code> to point to the correct binary location.</li>
+  </ul>
+
+  <h3>Duration ratio check failing</h3>
+  <p>If jobs are consistently failing with a duration ratio error for a specific source format:</p>
+  <ul>
+    <li>Check whether the source file has a reliable duration header; some containers (MKV, MPEG-TS) may report inaccurate durations.</li>
+    <li>Lower <code>duration_ratio_min</code> (e.g. to <code>0.90</code>) if small duration discrepancies are acceptable for your content.</li>
+    <li>Use <code>"frame_check_count": 0</code> and rely on file-size and stream-present checks instead.</li>
+  </ul>
+
+  <h3>No video stream detected</h3>
+  <p>If you are encoding audio-only content (podcasts, music), set <code>require_video_stream: false</code> either globally or in the per-job override.</p>
+
+  <h3>Disabling validation</h3>
+  <p>To disable output validation globally:</p>
+  <pre><code>validation:
+  enabled: false</code></pre>
+  <p>Disabling validation is not recommended for production workflows, as it removes the safety net that catches silent encoding corruption.</p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/retry">Intelligent Retry</a> — How validation failures interact with retry policies</li>
+    <li><a href="/docs/estimation">Cost &amp; Time Estimation</a> — Pre-flight estimates before encoding begins</li>
+    <li><a href="/docs/agents">Agent Management</a> — Agent capabilities and ffprobe version reporting</li>
+  </ul>
+</DocsLayout>

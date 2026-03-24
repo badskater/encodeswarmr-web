@@ -1,0 +1,170 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Encoding Presets">
+  <h1>Encoding Presets</h1>
+  <p>
+    Encoding presets are named, reusable bundles of FFmpeg parameters that define the codec, quality settings, filters, and container format for an encode. Presets can be selected in the web UI, referenced in flow nodes, or passed directly to the API. EncodeSwarmr ships with a set of carefully tuned built-in presets; you can also create custom presets from scratch or by cloning a built-in.
+  </p>
+
+  <h2>Built-in Presets</h2>
+  <table>
+    <thead>
+      <tr><th>Preset Name</th><th>Video Codec</th><th>HDR</th><th>Target Bitrate / CRF</th><th>Use Case</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>4k-hdr10-quality</code></td>
+        <td>x265 (HEVC)</td>
+        <td>HDR10</td>
+        <td>CRF 18, slow preset</td>
+        <td>Archival 4K HDR10 — maximum quality, large file size.</td>
+      </tr>
+      <tr>
+        <td><code>4k-hdr10-balanced</code></td>
+        <td>x265 (HEVC)</td>
+        <td>HDR10</td>
+        <td>CRF 22, medium preset</td>
+        <td>Balanced 4K HDR10 — good quality with moderate encode time.</td>
+      </tr>
+      <tr>
+        <td><code>1080p-x265-quality</code></td>
+        <td>x265 (HEVC)</td>
+        <td>SDR</td>
+        <td>CRF 20, slow preset</td>
+        <td>High-quality 1080p HEVC for long-term storage.</td>
+      </tr>
+      <tr>
+        <td><code>1080p-x265-fast</code></td>
+        <td>x265 (HEVC)</td>
+        <td>SDR</td>
+        <td>CRF 24, fast preset</td>
+        <td>Quick turnaround 1080p HEVC. Slightly larger than quality variant.</td>
+      </tr>
+      <tr>
+        <td><code>1080p-x264</code></td>
+        <td>x264 (H.264)</td>
+        <td>SDR</td>
+        <td>CRF 20, medium preset</td>
+        <td>Broad compatibility 1080p H.264. Works on virtually every device.</td>
+      </tr>
+      <tr>
+        <td><code>web-h264</code></td>
+        <td>x264 (H.264)</td>
+        <td>SDR</td>
+        <td>ABR 4 Mbps, Main profile</td>
+        <td>Web streaming H.264. Constrained bitrate for adaptive streaming ladders.</td>
+      </tr>
+      <tr>
+        <td><code>web-av1</code></td>
+        <td>SVT-AV1</td>
+        <td>SDR</td>
+        <td>CRF 32, preset 6</td>
+        <td>Modern web delivery with AV1. Smaller files than H.264 at equivalent quality.</td>
+      </tr>
+      <tr>
+        <td><code>archive-lossless</code></td>
+        <td>FFV1</td>
+        <td>SDR</td>
+        <td>Lossless</td>
+        <td>Bit-exact preservation. Very large files; intended for mezzanine archival.</td>
+      </tr>
+      <tr>
+        <td><code>dolby-vision</code></td>
+        <td>x265 (HEVC)</td>
+        <td>Dolby Vision</td>
+        <td>CRF 20, slow preset</td>
+        <td>Dolby Vision profile 8.1 with HDR10 cross-compatibility track. Requires DV-capable source.</td>
+      </tr>
+      <tr>
+        <td><code>hdr10plus</code></td>
+        <td>x265 (HEVC)</td>
+        <td>HDR10+</td>
+        <td>CRF 20, slow preset</td>
+        <td>HDR10+ with dynamic metadata. Extracts and re-injects HDR10+ SEI from source.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Using Presets</h2>
+
+  <h3>Web UI</h3>
+  <p>
+    Presets are available from two entry points in the web UI:
+  </p>
+  <ul>
+    <li><strong>New Job</strong> — In the job creation form, select <em>Preset</em> as the pipeline type and choose a preset from the dropdown. Built-in presets appear first, followed by custom presets sorted alphabetically.</li>
+    <li><strong>Presets Library</strong> — Navigate to <strong>Settings &gt; Presets</strong> to view, create, clone, edit, and delete presets. Each preset page shows the full FFmpeg argument list and a diff view when compared to the built-in it was cloned from.</li>
+  </ul>
+
+  <h3>API</h3>
+  <p>Submit a job using a preset by name:</p>
+  <pre><code>curl -X POST https://controller/api/v1/jobs \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "source_id": "src_abc123",
+    "pipeline": &#123;
+      "type": "preset",
+      "preset": "1080p-x265-quality"
+    &#125;,
+    "output": &#123;
+      "path": "/mnt/output/&#123;source_name&#125;.mkv"
+    &#125;
+  &#125;'</code></pre>
+
+  <p>List all available presets:</p>
+  <pre><code>curl https://controller/api/v1/presets \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+  <p>Create a custom preset:</p>
+  <pre><code>curl -X POST https://controller/api/v1/presets \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "name": "my-720p-h264",
+    "description": "720p H.264 for tablet streaming",
+    "video": &#123;
+      "codec": "libx264",
+      "crf": 23,
+      "preset": "medium",
+      "profile": "main",
+      "level": "3.1",
+      "scale": "1280:720"
+    &#125;,
+    "audio": &#123;
+      "codec": "aac",
+      "bitrate": "128k",
+      "channels": 2
+    &#125;,
+    "container": "mp4"
+  &#125;'</code></pre>
+
+  <h2>Cost Estimation</h2>
+  <p>
+    Before submitting a job, you can request a cost estimate that returns predicted encode time, agent-hours, and (if cloud agents are configured) estimated cloud spend. The estimate is based on historical job metrics for the same preset and source duration/resolution combination.
+  </p>
+  <pre><code>curl -X POST https://controller/api/v1/estimate \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "source_id": "src_abc123",
+    "pipeline": &#123;
+      "type": "preset",
+      "preset": "4k-hdr10-quality"
+    &#125;
+  &#125;'
+
+HTTP/1.1 200 OK
+&#123;
+  "estimated_duration_seconds": 7420,
+  "estimated_agent_hours": 2.06,
+  "estimated_cloud_cost_usd": 0.412,
+  "confidence": "high",
+  "based_on_samples": 34
+&#125;</code></pre>
+  <p>
+    Confidence levels are <code>high</code> (&gt;20 historical samples), <code>medium</code> (5–20 samples), or <code>low</code> (&lt;5 samples). Low-confidence estimates have wider error margins and should be treated as rough guides only.
+  </p>
+</DocsLayout>

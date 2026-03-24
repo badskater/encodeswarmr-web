@@ -5,39 +5,50 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 <DocsLayout title="Webhooks">
   <h1>Webhooks</h1>
   <p>
-    EncodeSwarmr can send notifications to external services when events occur. Webhooks support Discord, Microsoft Teams, and Slack with HMAC-SHA256 signature verification.
+    EncodeSwarmr can send real-time notifications to external services when events occur in the system. Webhooks support Discord, Microsoft Teams, and Slack with HMAC-SHA256 signature verification and automatic retry on delivery failure.
   </p>
 
   <h2>Supported Providers</h2>
   <table>
     <thead>
-      <tr><th>Provider</th><th>Format</th></tr>
+      <tr><th>Provider</th><th>Format</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>Discord</td><td>Discord webhook embeds</td></tr>
-      <tr><td>Microsoft Teams</td><td>Adaptive Cards</td></tr>
-      <tr><td>Slack</td><td>Block Kit messages</td></tr>
+      <tr><td>Discord</td><td>Discord webhook embeds</td><td>Rich embeds with colour-coded severity</td></tr>
+      <tr><td>Microsoft Teams</td><td>Adaptive Cards</td><td>Fully formatted cards via Incoming Webhook connector</td></tr>
+      <tr><td>Slack</td><td>Block Kit messages</td><td>Structured blocks with context and section elements</td></tr>
     </tbody>
   </table>
 
   <h2>Configuration</h2>
-  <p>Add webhooks to your <code>controller.yaml</code>:</p>
+  <p>Add one or more webhook targets to your <code>controller.yaml</code>:</p>
   <pre><code>webhooks:
   - name: discord-alerts
-    url: https://discord.com/api/webhooks/123/abc
+    url: https://discord.com/api/webhooks/123456789/abcdefgh
     provider: discord
     secret: my-hmac-secret
     events:
       - job.completed
       - job.failed
-      - agent.offline
+      - job.cancelled
+      - agent.disconnected
+
+  - name: teams-ops
+    url: https://outlook.office.com/webhook/xxx/IncomingWebhook/yyy/zzz
+    provider: teams
+    secret: teams-secret
+    events:
+      - job.failed
+      - agent.stale
+
   - name: slack-ops
-    url: https://hooks.slack.com/services/T.../B.../xxx
+    url: https://hooks.slack.com/services/T000/B000/xxxxxxxxxxxx
     provider: slack
     secret: another-secret
     events:
       - job.failed
-      - agent.offline</code></pre>
+      - agent.disconnected
+      - agent.stale</code></pre>
 
   <h2>Available Events</h2>
   <table>
@@ -45,42 +56,68 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Event</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>job.queued</code></td><td>A new job has been added to the queue</td></tr>
-      <tr><td><code>job.started</code></td><td>An agent has started processing a job</td></tr>
+      <tr><td><code>job.created</code></td><td>A new job has been submitted to the system</td></tr>
       <tr><td><code>job.completed</code></td><td>A job finished successfully</td></tr>
-      <tr><td><code>job.failed</code></td><td>A job failed after all retries</td></tr>
-      <tr><td><code>agent.online</code></td><td>An agent connected to the Controller</td></tr>
-      <tr><td><code>agent.offline</code></td><td>An agent lost connectivity</td></tr>
-      <tr><td><code>analysis.completed</code></td><td>Source analysis finished</td></tr>
+      <tr><td><code>job.failed</code></td><td>A job failed after all retries are exhausted</td></tr>
+      <tr><td><code>job.cancelled</code></td><td>A job was cancelled by a user or via the API</td></tr>
+      <tr><td><code>agent.connected</code></td><td>An agent connected (or reconnected) to the Controller</td></tr>
+      <tr><td><code>agent.disconnected</code></td><td>An agent lost connectivity to the Controller</td></tr>
+      <tr><td><code>agent.stale</code></td><td>An agent has not sent a heartbeat within the stale threshold</td></tr>
     </tbody>
   </table>
 
-  <h2>Signature Verification</h2>
+  <h2>HMAC-SHA256 Signature Verification</h2>
   <p>
-    Each webhook delivery includes an <code>X-EncodeSwarmr-Signature</code> header containing an HMAC-SHA256 signature of the request body using your configured secret. Verify this signature on the receiving end to ensure authenticity.
+    Every webhook delivery includes an <code>X-EncodeSwarmr-Signature</code> header containing an HMAC-SHA256 signature of the raw request body, computed using the <code>secret</code> you configured. Verify this signature on the receiving end to ensure authenticity and reject forged payloads.
   </p>
-  <pre><code># Signature format:
+  <pre><code># Header format:
 # X-EncodeSwarmr-Signature: sha256=&lt;hex-encoded-hmac&gt;
 
-# Verification pseudocode:
-expected = hmac_sha256(secret, request_body)
-assert signature == "sha256=" + hex(expected)</code></pre>
+# Python verification example:
+import hmac, hashlib
+
+def verify_signature(secret: str, body: bytes, header: str) -&gt; bool:
+    expected = "sha256=" + hmac.new(
+        secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header)
+
+# Node.js verification example:
+const crypto = require('crypto');
+
+function verifySignature(secret, body, header) &#123;
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(body)
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(header)
+  );
+&#125;</code></pre>
+  <p>
+    Always use a constant-time comparison function (e.g. <code>hmac.compare_digest</code> in Python or <code>crypto.timingSafeEqual</code> in Node.js) to prevent timing attacks.
+  </p>
 
   <h2>Retry Delivery</h2>
   <p>
-    Failed webhook deliveries are retried with exponential backoff. The retry schedule:
+    If a webhook endpoint returns a non-2xx HTTP response or times out, EncodeSwarmr retries delivery with exponential backoff:
   </p>
   <ul>
-    <li>1st retry: 30 seconds</li>
+    <li>1st retry: 30 seconds after initial failure</li>
     <li>2nd retry: 2 minutes</li>
     <li>3rd retry: 10 minutes</li>
     <li>4th retry: 1 hour</li>
-    <li>After 4 failures, the delivery is marked as failed</li>
+    <li>After 4 consecutive failures the delivery is marked as permanently failed and no further retries are attempted</li>
   </ul>
+  <p>
+    Delivery history and failure reasons are visible in the admin UI under <strong>Settings → Webhooks → Delivery Log</strong>.
+  </p>
 
   <h2>Next Steps</h2>
   <ul>
-    <li><a href="/docs/ha">High Availability</a> — Production deployment patterns</li>
+    <li><a href="/docs/email">Email Notifications</a> — SMTP-based per-user notification preferences</li>
     <li><a href="/docs/api">API Reference</a> — Webhook management endpoints</li>
+    <li><a href="/docs/ha">High Availability</a> — Production deployment patterns</li>
   </ul>
 </DocsLayout>

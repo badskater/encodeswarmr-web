@@ -1,0 +1,91 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Job Preemption">
+  <h1>Job Preemption</h1>
+  <p>
+    Job preemption allows a high-priority job to interrupt a lower-priority job that is currently being processed by an agent. The preempted job is returned to the queue with its progress preserved (where the encoder supports resumption), and the agent immediately picks up the high-priority work.
+  </p>
+
+  <h2>How It Works</h2>
+  <ol>
+    <li>An operator (or an automated system) calls the preempt API endpoint targeting a running task.</li>
+    <li>The Controller sends a preemption signal to the agent processing that task over the existing gRPC stream.</li>
+    <li>The agent cleanly stops the ffmpeg process, saves any checkpoint data (completed segments, partial progress) to the local journal, and acknowledges the preemption to the Controller.</li>
+    <li>The Controller marks the original job as <code>preempted</code> and re-queues it at the front of its priority band so it will be picked up again as soon as an agent is free.</li>
+    <li>The agent is immediately made available and picks up the next job from the queue (typically the high-priority job that triggered the preemption).</li>
+  </ol>
+
+  <h2>API Endpoint</h2>
+  <pre><code>POST /api/v1/tasks/&#123;id&#125;/preempt
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+&#123;
+  "reason": "urgent client delivery — bumping priority"
+&#125;
+
+# Response 202 Accepted:
+&#123;
+  "task_id": "task-abc123",
+  "status": "preempting",
+  "message": "Preemption signal sent to agent agent-x1y2"
+&#125;
+
+# Response 409 Conflict (task is not currently running):
+&#123;
+  "error": "task is not in a running state",
+  "current_status": "queued"
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>id</code> (path)</td><td>The task ID to preempt; must be in <code>running</code> state</td></tr>
+      <tr><td><code>reason</code> (body)</td><td>Optional human-readable reason recorded in the audit log</td></tr>
+    </tbody>
+  </table>
+
+  <p>Only users with the <strong>operator</strong> or <strong>admin</strong> role may call this endpoint. Preempting your own jobs requires at minimum the <strong>user</strong> role.</p>
+
+  <h2>Priority and Re-queuing</h2>
+  <p>
+    When a job is preempted, it is placed at the head of its original priority band. This means it will be the next job dispatched at that priority level, ahead of other queued jobs. The preempted job's priority is not changed; only its position within the queue is adjusted.
+  </p>
+  <p>
+    If the agent supports checkpoint resumption for the codec being used, the re-queued job will restart from the last completed segment rather than from the beginning, reducing wasted work.
+  </p>
+
+  <h2>Database Migration Note</h2>
+  <p>
+    The preemption feature requires the <code>tasks</code> table to have the <code>preempted_at</code> and <code>preemption_reason</code> columns, added in migration <code>0012_add_task_preemption.sql</code>. If you are upgrading from a version prior to 1.3.0, run database migrations before enabling this feature:
+  </p>
+  <pre><code># Run pending migrations:
+encodeswarmr-ctl migrate up
+
+# Verify migration applied:
+encodeswarmr-ctl migrate status
+# Expected output includes:
+# [applied] 0012_add_task_preemption.sql</code></pre>
+  <p>
+    The Controller will refuse to start if required migrations have not been applied, so this step is enforced automatically on startup.
+  </p>
+
+  <h2>Viewing Preemption History</h2>
+  <p>
+    The job detail page shows a <strong>Preempted</strong> badge if the job was interrupted at least once. The full preemption history, including timestamps, agent IDs, and reasons, is available under the <strong>Timeline</strong> tab.
+  </p>
+  <p>You can also query preempted jobs via the API:</p>
+  <pre><code>GET /api/v1/jobs?status=preempted
+Authorization: Bearer &lt;token&gt;</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/retry">Intelligent Retry</a> — Automatic retry policies for failed jobs</li>
+    <li><a href="/docs/agents">Agent Management</a> — Agent capabilities and job dispatch</li>
+    <li><a href="/docs/api">API Reference</a> — Full task and job endpoint documentation</li>
+  </ul>
+</DocsLayout>

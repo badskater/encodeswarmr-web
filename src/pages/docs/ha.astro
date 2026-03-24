@@ -1,90 +1,278 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
 ---
-
-<DocsLayout title="High Availability">
-  <h1>High Availability</h1>
+<DocsLayout title="High Availability Setup">
+  <h1>High Availability Setup</h1>
   <p>
-    EncodeSwarmr supports active-passive high availability for production deployments that require fault tolerance.
+    EncodeSwarmr supports an active-passive high-availability model for production deployments that require fault
+    tolerance and minimal downtime. HA is coordinated through the shared PostgreSQL database with no additional
+    external consensus service required.
   </p>
 
-  <h2>Controller HA</h2>
+  <h2>Overview: Active-Passive Model</h2>
   <p>
-    Controller HA uses PostgreSQL advisory locks to ensure only one instance is actively processing jobs at any time. The setup:
+    In HA mode, two or more controller instances run simultaneously and share a single PostgreSQL database. At any
+    given moment exactly one instance is <strong>active</strong> (processing jobs, dispatching work to agents,
+    writing state) while the remaining instances are <strong>standby</strong>. Standby instances serve read-only
+    API requests and health checks but do not dispatch jobs.
+  </p>
+  <p>
+    When the active controller becomes unavailable a standby detects the stale lock and promotes itself to active
+    within the configured <code>lock_timeout</code> window (default 30 seconds). No manual intervention is required.
+  </p>
+
+  <h2>Leader Election</h2>
+  <p>
+    Leader election is implemented using a <strong>PostgreSQL advisory lock</strong>. The mechanism works as follows:
   </p>
   <ol>
-    <li>Deploy two or more Controller instances pointing to the same PostgreSQL database</li>
-    <li>One instance acquires the advisory lock and becomes the <strong>active</strong> leader</li>
-    <li>Other instances remain in <strong>standby</strong>, serving only read-only API requests</li>
-    <li>If the active instance fails, a standby acquires the lock and becomes active</li>
+    <li>On startup each controller instance attempts to acquire a well-known advisory lock ID via <code>pg_try_advisory_lock()</code></li>
+    <li>The first instance to succeed becomes the <strong>active leader</strong> and begins processing jobs</li>
+    <li>The active leader refreshes the lock on a configurable interval (<code>lock_refresh_interval</code>, default 5 s) by executing a heartbeat query</li>
+    <li>Standby instances poll PostgreSQL for the lock owner. If the lock has not been refreshed within <code>lock_timeout</code> (default 30 s) the standby calls <code>pg_try_advisory_lock()</code> and, if successful, transitions to active</li>
   </ol>
-
-  <h3>Configuration</h3>
-  <pre><code>ha:
+  <p>
+    Because the advisory lock is tied to the database connection, a crashed or network-partitioned controller
+    automatically releases the lock when its connection drops, enabling fast failover without a split-brain scenario.
+  </p>
+  <pre><code># controller.yml — HA configuration block
+ha:
   enabled: true
-  lock_refresh_interval: 5s   # How often to refresh the advisory lock
+  lock_refresh_interval: 5s   # How often the active leader refreshes its lock
   lock_timeout: 30s           # How long before a stale lock is considered expired</code></pre>
 
-  <h2>Database HA</h2>
+  <h2>Node Identity</h2>
   <p>
-    For database-level high availability, EncodeSwarmr recommends Patroni with pgBouncer:
+    Each controller instance is assigned a stable node identity used in HA status reporting, logs, and the
+    <code>/api/v1/ha/status</code> endpoint. The identity defaults to the system hostname but can be overridden:
   </p>
-  <ul>
-    <li><strong>Patroni</strong> — Manages PostgreSQL replication and automatic failover</li>
-    <li><strong>pgBouncer</strong> — Connection pooling to handle failover transparently</li>
-  </ul>
+  <pre><code>ha:
+  enabled: true
+  node_id: "controller-01"    # Optional; defaults to os.Hostname()</code></pre>
 
-  <p>Point the Controller's database configuration at the pgBouncer endpoint. Patroni handles failover automatically.</p>
+  <h2>Health and Status Endpoints</h2>
+  <table>
+    <thead>
+      <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/health</code></td>
+        <td>GET</td>
+        <td>Returns HTTP 200 with role (<code>active</code> or <code>standby</code>). Use this for load balancer health checks.</td>
+      </tr>
+      <tr>
+        <td><code>/api/v1/ha/status</code></td>
+        <td>GET</td>
+        <td>Returns detailed HA status: node ID, role, lock holder, last heartbeat timestamp, and cluster membership list.</td>
+      </tr>
+    </tbody>
+  </table>
 
-  <h2>Load Balancing</h2>
-  <p>
-    Place a load balancer (nginx, HAProxy, or cloud LB) in front of Controller instances:
-  </p>
-  <ul>
-    <li><strong>HTTP traffic</strong> (port 8080) — Round-robin or least-connections to any instance</li>
-    <li><strong>gRPC traffic</strong> (port 9443) — Route to the active instance only</li>
-    <li>Use the <code>/health</code> endpoint for health checks</li>
-  </ul>
-
-  <h3>Health Check Response</h3>
-  <pre><code>GET /health
-
-# Active instance:
+  <pre><code># GET /health — active instance
 &#123;"status": "ok", "role": "active", "version": "1.0.0"&#125;
 
-# Standby instance:
-&#123;"status": "ok", "role": "standby", "version": "1.0.0"&#125;</code></pre>
+# GET /health — standby instance
+&#123;"status": "ok", "role": "standby", "version": "1.0.0"&#125;
 
-  <h2>Agent Resilience</h2>
+# GET /api/v1/ha/status
+&#123;
+  "node_id": "controller-01",
+  "role": "active",
+  "lock_holder": "controller-01",
+  "last_heartbeat": "2026-03-24T10:00:05Z",
+  "cluster": [
+    &#123;"node_id": "controller-01", "role": "active",  "healthy": true&#125;,
+    &#123;"node_id": "controller-02", "role": "standby", "healthy": true&#125;
+  ]
+&#125;</code></pre>
+
+  <h2>Agent Reconnection</h2>
   <p>
-    Agents are inherently resilient to Controller failover:
+    Agents are designed to survive controller failover transparently:
+  </p>
+  <ol>
+    <li>The agent's gRPC connection to the active controller drops when the active instance fails</li>
+    <li>The agent detects the disconnection immediately via the gRPC keepalive mechanism</li>
+    <li>The agent enters a reconnect loop with exponential backoff (initial 1 s, max 30 s) connecting to the load balancer address — not a specific controller IP</li>
+    <li>Once the standby promotes to active (within <code>lock_timeout</code>) and the load balancer health check passes, the agent reconnects and resumes work. Any in-progress chunk completes locally and its result is buffered in the SQLite journal until the connection is re-established</li>
+  </ol>
+  <p>No manual intervention is required on the agent side during a failover event.</p>
+
+  <h2>Docker Compose Example</h2>
+  <p>Full two-controller HA stack with nginx as the load balancer:</p>
+  <pre><code># docker-compose.ha.yml
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: encodeswarmr
+      POSTGRES_USER: encodeswarmr
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U encodeswarmr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  controller-1:
+    image: ghcr.io/badskater/encodeswarmr-controller:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DE_DB_HOST: postgres
+      DE_DB_PORT: "5432"
+      DE_DB_NAME: encodeswarmr
+      DE_DB_USER: encodeswarmr
+      DE_DB_PASSWORD: changeme
+      DE_HTTP_ADDR: "0.0.0.0:8080"
+      DE_GRPC_ADDR: "0.0.0.0:9443"
+      DE_TLS_CA_CERT: /etc/encodeswarmr/certs/ca.crt
+      DE_TLS_SERVER_CERT: /etc/encodeswarmr/certs/server.crt
+      DE_TLS_SERVER_KEY: /etc/encodeswarmr/certs/server.key
+      DE_SECRET_KEY: replace-with-32-byte-random-string
+      DE_HA_ENABLED: "true"
+      DE_HA_NODE_ID: "controller-1"
+      DE_HA_LOCK_REFRESH_INTERVAL: "5s"
+      DE_HA_LOCK_TIMEOUT: "30s"
+    volumes:
+      - ./certs:/etc/encodeswarmr/certs:ro
+      - media:/mnt/media
+
+  controller-2:
+    image: ghcr.io/badskater/encodeswarmr-controller:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DE_DB_HOST: postgres
+      DE_DB_PORT: "5432"
+      DE_DB_NAME: encodeswarmr
+      DE_DB_USER: encodeswarmr
+      DE_DB_PASSWORD: changeme
+      DE_HTTP_ADDR: "0.0.0.0:8080"
+      DE_GRPC_ADDR: "0.0.0.0:9443"
+      DE_TLS_CA_CERT: /etc/encodeswarmr/certs/ca.crt
+      DE_TLS_SERVER_CERT: /etc/encodeswarmr/certs/server.crt
+      DE_TLS_SERVER_KEY: /etc/encodeswarmr/certs/server.key
+      DE_SECRET_KEY: replace-with-32-byte-random-string
+      DE_HA_ENABLED: "true"
+      DE_HA_NODE_ID: "controller-2"
+      DE_HA_LOCK_REFRESH_INTERVAL: "5s"
+      DE_HA_LOCK_TIMEOUT: "30s"
+    volumes:
+      - ./certs:/etc/encodeswarmr/certs:ro
+      - media:/mnt/media
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9443:9443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - controller-1
+      - controller-2
+
+volumes:
+  postgres_data:
+  media:</code></pre>
+
+  <h3>Minimal <code>nginx.conf</code></h3>
+  <pre><code>events &#123;&#125;
+
+http &#123;
+  upstream controllers_http &#123;
+    server controller-1:8080;
+    server controller-2:8080;
+  &#125;
+
+  server &#123;
+    listen 8080;
+    location / &#123;
+      proxy_pass http://controllers_http;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+    &#125;
+  &#125;
+&#125;
+
+stream &#123;
+  upstream controllers_grpc &#123;
+    server controller-1:9443;
+    server controller-2:9443;
+  &#125;
+
+  server &#123;
+    listen 9443;
+    proxy_pass controllers_grpc;
+  &#125;
+&#125;</code></pre>
+
+  <h2>PostgreSQL HA with Patroni</h2>
+  <p>
+    For database-level high availability, EncodeSwarmr recommends <strong>Patroni</strong> with
+    <strong>pgBouncer</strong> for connection pooling:
   </p>
   <ul>
-    <li>gRPC connections automatically reconnect with exponential backoff</li>
-    <li>In-progress jobs continue during failover</li>
-    <li>Results buffer in the local SQLite journal until connectivity is restored</li>
-    <li>No manual intervention required on the agent side</li>
+    <li><strong>Patroni</strong> — Manages PostgreSQL streaming replication and automatic primary failover using etcd, Consul, or ZooKeeper as the distributed configuration store</li>
+    <li><strong>pgBouncer</strong> — Sits in front of Patroni and transparently re-routes connections to the current primary after a failover; the controller configuration always points at the pgBouncer address</li>
   </ul>
-
-  <h2>Deployment Architecture</h2>
-  <pre><code>                    Load Balancer
-                    ┌──────────┐
-                    │ nginx/LB │
-                    └────┬─────┘
-                ┌────────┼────────┐
-          ┌─────┴─────┐     ┌────┴──────┐
-          │Controller 1│     │Controller 2│
-          │  (active)  │     │ (standby)  │
-          └─────┬──────┘     └─────┬──────┘
-                └────────┬─────────┘
-              ┌──────────┴──────────┐
-              │ PostgreSQL (Patroni) │
-              │   Primary + Replica  │
-              └──────────────────────┘</code></pre>
-
-  <h2>Next Steps</h2>
+  <p>
+    Considerations when using Patroni:
+  </p>
   <ul>
-    <li><a href="/docs/configuration">Configuration Reference</a> — All HA-related settings</li>
-    <li><a href="/docs/agents">Agent Management</a> — Agent behavior during failover</li>
+    <li>Advisory locks are connection-scoped — ensure pgBouncer is configured in <strong>session</strong> pooling mode (not transaction mode) so the advisory lock persists for the lifetime of the controller connection</li>
+    <li>Use <code>server_idle_timeout = 0</code> in pgBouncer to prevent idle connections from being dropped and releasing the advisory lock prematurely</li>
+    <li>During a Patroni failover (PostgreSQL primary switch) the controller advisory lock will be released. Expect a brief HA re-election cycle (≤ <code>lock_timeout</code>) as both controllers reconnect and one acquires the new lock</li>
   </ul>
+
+  <h2>Failure Scenarios</h2>
+  <table>
+    <thead>
+      <tr><th>Scenario</th><th>Detection</th><th>Recovery Time</th><th>Agent Impact</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Active controller process crash</td>
+        <td>PostgreSQL connection drop releases advisory lock immediately</td>
+        <td>&lt; 5 s (standby acquires lock on next poll)</td>
+        <td>Brief reconnect; in-progress chunks continue locally</td>
+      </tr>
+      <tr>
+        <td>Active controller host failure (power / kernel panic)</td>
+        <td>PostgreSQL TCP keepalive detects dead connection within ~30 s</td>
+        <td>30–60 s (TCP timeout + lock acquisition)</td>
+        <td>Agents buffer results in SQLite journal; no chunk loss</td>
+      </tr>
+      <tr>
+        <td>Network partition (active controller loses DB connectivity)</td>
+        <td>Active controller cannot refresh lock; lock expires after <code>lock_timeout</code></td>
+        <td>≤ <code>lock_timeout</code> (default 30 s)</td>
+        <td>Agents lose gRPC stream; reconnect after failover</td>
+      </tr>
+      <tr>
+        <td>PostgreSQL primary failover (Patroni)</td>
+        <td>All controllers lose DB connection; reconnect to new primary via pgBouncer</td>
+        <td>Patroni failover (10–30 s) + lock re-election (≤ 30 s)</td>
+        <td>Same as network partition above</td>
+      </tr>
+      <tr>
+        <td>Load balancer failure</td>
+        <td>Agents cannot connect to load balancer address</td>
+        <td>Depends on LB HA (cloud LBs are inherently redundant)</td>
+        <td>Agents buffer results until LB recovers</td>
+      </tr>
+    </tbody>
+  </table>
 </DocsLayout>

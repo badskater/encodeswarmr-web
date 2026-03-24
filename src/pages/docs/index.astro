@@ -7,47 +7,105 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <p>
     EncodeSwarmr is a distributed video encoding orchestration platform that coordinates GPU-accelerated encoding across multiple machines. It uses a Controller-Agent architecture where a central Controller manages job queuing, scheduling, and monitoring while Agents on remote machines perform the actual encoding work.
   </p>
-
-  <h2>Key Concepts</h2>
-
-  <h3>Controller</h3>
   <p>
-    The Controller is the central hub that runs as a single Go binary. It provides:
+    Use the navigation links below or the sidebar to explore the documentation. New users should start with <a href="/docs/getting-started">Getting Started</a> to set up your first Controller and Agent.
   </p>
-  <ul>
-    <li>A REST API (<code>/api/v1</code>) for programmatic access</li>
-    <li>A React-based web dashboard for visual management</li>
-    <li>A gRPC service (port 9443) for agent communication over mTLS</li>
-    <li>A WebSocket event hub for real-time UI updates</li>
-    <li>Job queue management with priority FIFO scheduling</li>
-    <li>Script generation from templates (AviSynth/VapourSynth)</li>
-    <li>Media analysis coordination (HDR detection, VMAF, scene detection)</li>
-  </ul>
 
-  <h3>Agents</h3>
-  <p>
-    Agents are worker nodes installed on machines with GPU hardware. They:
-  </p>
-  <ul>
-    <li>Connect to the Controller over gRPC with mTLS encryption</li>
-    <li>Auto-detect GPU capabilities (NVIDIA NVENC, Intel QSV, AMD AMF)</li>
-    <li>Execute encoding jobs and stream real-time progress</li>
-    <li>Maintain a local SQLite journal for offline resilience</li>
-    <li>Support self-upgrade with SHA-256 verified binary downloads</li>
-  </ul>
+  <h2>Quick Navigation</h2>
 
-  <h3>Jobs</h3>
-  <p>
-    A job represents a single encoding task. Jobs flow through the system as follows:
-  </p>
-  <ol>
-    <li>A source is registered (local path or cloud storage URI)</li>
-    <li>Analysis jobs auto-queue (HDR detection, optional VMAF/scene detection)</li>
-    <li>An encoding job is created with a preset and destination</li>
-    <li>The Controller assigns the job to an available Agent</li>
-    <li>The Agent executes the encode and streams progress back</li>
-    <li>On completion, results are recorded and webhooks fire</li>
-  </ol>
+  <h3>Getting Started</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/getting-started">Getting Started</a></td><td>Install the Controller and enrol your first Agent</td></tr>
+      <tr><td><a href="/docs/configuration">Configuration</a></td><td>All configuration options for the Controller and Agents</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Core Features</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/flow-editor">Flow Pipeline Editor</a></td><td>Visual node graph editor for multi-step encode workflows</td></tr>
+      <tr><td><a href="/docs/job-chaining">Job Chaining</a></td><td>Automatically trigger downstream jobs on completion</td></tr>
+      <tr><td><a href="/docs/batch-import">Batch Import</a></td><td>Import jobs from CSV, S3 bucket listings, or watch folders</td></tr>
+      <tr><td><a href="/docs/presets">Encoding Presets</a></td><td>Create and manage codec settings and quality presets</td></tr>
+      <tr><td><a href="/docs/adaptive-chunking">Adaptive Chunking</a></td><td>Split sources into segments and encode in parallel across agents</td></tr>
+      <tr><td><a href="/docs/cloud-storage">Cloud Storage</a></td><td>Use S3, Azure Blob, or GCS for source and output files</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Deployment</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/deployment-guide">Deployment Guide</a></td><td>End-to-end deployment walkthrough for production environments</td></tr>
+      <tr><td><a href="/docs/ansible">Ansible</a></td><td>Ansible roles and playbooks for bare-metal deployments</td></tr>
+      <tr><td><a href="/docs/terraform-aws">Terraform — AWS</a></td><td>Terraform module for deploying on Amazon Web Services</td></tr>
+      <tr><td><a href="/docs/terraform-azure">Terraform — Azure</a></td><td>Terraform module for deploying on Microsoft Azure</td></tr>
+      <tr><td><a href="/docs/terraform-gcp">Terraform — GCP</a></td><td>Terraform module for deploying on Google Cloud Platform</td></tr>
+      <tr><td><a href="/docs/kubernetes">Kubernetes (Helm)</a></td><td>Helm chart for Kubernetes with autoscaling support</td></tr>
+      <tr><td><a href="/docs/ha">HA Setup</a></td><td>High-availability Controller configuration</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Operations</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/webhooks">Webhooks</a></td><td>Outbound HTTP webhooks on job events</td></tr>
+      <tr><td><a href="/docs/email">Email Notifications</a></td><td>SMTP-based email alerts for job and agent events</td></tr>
+      <tr><td><a href="/docs/auto-scaling">Auto-Scaling</a></td><td>Dynamically scale agent pools based on queue depth</td></tr>
+      <tr><td><a href="/docs/retry">Intelligent Retry</a></td><td>Per-error-class retry strategies with back-off</td></tr>
+      <tr><td><a href="/docs/preemption">Job Preemption</a></td><td>Interrupt lower-priority jobs to free capacity for urgent work</td></tr>
+      <tr><td><a href="/docs/validation">Output Validation</a></td><td>VMAF and bitrate threshold checks after encoding</td></tr>
+      <tr><td><a href="/docs/export">Job Export &amp; Archival</a></td><td>Archive completed jobs and outputs to cloud storage</td></tr>
+      <tr><td><a href="/docs/template-versioning">Template Versioning</a></td><td>Version-controlled filter script templates with diff and rollback</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Observability</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/grafana">Grafana Dashboards</a></td><td>Pre-built dashboards for job throughput and agent health</td></tr>
+      <tr><td><a href="/docs/tracing">OpenTelemetry Tracing</a></td><td>Distributed tracing with OTLP export to Jaeger or Tempo</td></tr>
+      <tr><td><a href="/docs/capacity">Capacity Planning</a></td><td>Estimate agents, storage, and bandwidth for your workload</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Customization</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/theme">Theme &amp; Branding</a></td><td>Customise the dashboard appearance and organisation branding</td></tr>
+      <tr><td><a href="/docs/plugins">Plugin System</a></td><td>Built-in codec plugins and how to add custom ones</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Architecture</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/architecture">Architecture</a></td><td>System overview, component diagram, and repository layout</td></tr>
+      <tr><td><a href="/docs/adr">ADR Index</a></td><td>Architecture Decision Records explaining key design choices</td></tr>
+      <tr><td><a href="/docs/roadmap">Roadmap</a></td><td>Planned features and improvements by phase</td></tr>
+    </tbody>
+  </table>
 
   <h2>System Requirements</h2>
 
@@ -58,9 +116,11 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     </thead>
     <tbody>
       <tr><td>OS</td><td>Linux (Docker recommended)</td></tr>
+      <tr><td>CPU</td><td>2 cores minimum, 4+ recommended</td></tr>
+      <tr><td>Memory</td><td>512 MB minimum, 2 GB recommended</td></tr>
       <tr><td>Database</td><td>PostgreSQL 16+</td></tr>
-      <tr><td>Memory</td><td>512 MB minimum</td></tr>
-      <tr><td>Ports</td><td>8080 (HTTP), 9443 (gRPC)</td></tr>
+      <tr><td>Ports</td><td>8080 (HTTP/WebSocket), 9443 (gRPC)</td></tr>
+      <tr><td>Storage</td><td>10 GB for application and logs; database grows ~50 MB per 10,000 jobs</td></tr>
     </tbody>
   </table>
 
@@ -70,18 +130,30 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Component</th><th>Requirement</th></tr>
     </thead>
     <tbody>
-      <tr><td>OS</td><td>Windows Server / Windows 10+ / Linux</td></tr>
-      <tr><td>GPU</td><td>NVIDIA, Intel, or AMD with encoding support</td></tr>
-      <tr><td>Network</td><td>Outbound access to Controller on port 9443</td></tr>
-      <tr><td>Storage</td><td>Access to media shares (UNC/NFS)</td></tr>
+      <tr><td>OS</td><td>Windows Server 2019+ / Windows 10+ / Linux (Ubuntu 22.04+)</td></tr>
+      <tr><td>GPU</td><td>NVIDIA (NVENC), Intel (QSV), or AMD (AMF) with hardware encoder support</td></tr>
+      <tr><td>CPU</td><td>4 cores minimum for software encode; 2 cores sufficient for GPU-only encode</td></tr>
+      <tr><td>Memory</td><td>4 GB minimum, 8–16 GB recommended</td></tr>
+      <tr><td>Network</td><td>Outbound TCP to Controller port 9443; LAN access to media storage</td></tr>
+      <tr><td>Local Storage</td><td>3× the largest expected source file for chunked encoding temp files</td></tr>
     </tbody>
   </table>
 
-  <h2>Next Steps</h2>
-  <ul>
-    <li><a href="/docs/installation">Installation Guide</a> — Set up the Controller and your first Agent</li>
-    <li><a href="/docs/configuration">Configuration Reference</a> — All configuration options explained</li>
-    <li><a href="/docs/agents">Agent Management</a> — Enrollment, upgrades, and monitoring</li>
-    <li><a href="/docs/api">API Reference</a> — REST API endpoints and usage</li>
-  </ul>
+  <h2>Technology Stack</h2>
+  <table>
+    <thead>
+      <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Controller backend</td><td>Go 1.22+</td><td>REST API, gRPC server, scheduler, template engine</td></tr>
+      <tr><td>Agent backend</td><td>Go 1.22+</td><td>gRPC client, job runner, codec plugin host</td></tr>
+      <tr><td>Web frontend</td><td>React 18 + TypeScript + Vite</td><td>Dashboard SPA embedded in the Controller binary</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>Controller state: jobs, agents, presets, users</td></tr>
+      <tr><td>Agent journal</td><td>SQLite</td><td>Offline-resilient local job state on each Agent</td></tr>
+      <tr><td>Transport</td><td>gRPC + Protocol Buffers</td><td>Controller-Agent communication over mTLS</td></tr>
+      <tr><td>Observability</td><td>Prometheus + OpenTelemetry</td><td>Metrics scraping and distributed tracing</td></tr>
+      <tr><td>Dashboards</td><td>Grafana</td><td>Pre-built dashboards for operational monitoring</td></tr>
+      <tr><td>Container runtime</td><td>Docker / containerd</td><td>Recommended deployment method for the Controller</td></tr>
+    </tbody>
+  </table>
 </DocsLayout>

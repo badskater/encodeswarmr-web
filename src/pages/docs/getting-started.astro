@@ -1,0 +1,208 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Getting Started">
+  <h1>Getting Started</h1>
+  <p>
+    This guide walks you through building EncodeSwarmr from source, deploying the Controller, and registering your first Agent.
+  </p>
+
+  <h2>Prerequisites</h2>
+  <table>
+    <thead>
+      <tr><th>Tool</th><th>Minimum Version</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Go</td><td>1.25+</td><td>Required to build the controller and agent binaries</td></tr>
+      <tr><td>Node.js / npm</td><td>22+ / 10+</td><td>Required to build the React/Vite web frontend</td></tr>
+      <tr><td>Docker + Compose v2</td><td>24+ / 2.x</td><td>Required for the Docker Compose deployment path</td></tr>
+      <tr><td>protoc</td><td>28+</td><td>Protocol Buffers compiler; needed when regenerating gRPC stubs</td></tr>
+      <tr><td>golangci-lint</td><td>1.64+</td><td>Go linter suite; run automatically by <code>make lint</code></td></tr>
+      <tr><td>golang-migrate</td><td>4.x</td><td>Database schema migration tool; used by <code>make migrate-up</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Building from Source</h2>
+  <p>Clone the repository and use the top-level <code>Makefile</code>:</p>
+  <pre><code>git clone https://github.com/badskater/encodeswarmr.git
+cd encodeswarmr</code></pre>
+
+  <h3>Make Targets</h3>
+  <table>
+    <thead>
+      <tr><th>Target</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>make all</code></td><td>Build everything: web frontend, controller binary, and agent binaries (Windows + Linux)</td></tr>
+      <tr><td><code>make web</code></td><td>Build only the React/Vite frontend into <code>internal/web/dist/</code></td></tr>
+      <tr><td><code>make controller</code></td><td>Compile the Linux controller binary to <code>bin/encodeswarmr-controller</code></td></tr>
+      <tr><td><code>make agent</code></td><td>Cross-compile the Windows agent binary to <code>bin/encodeswarmr-agent.exe</code></td></tr>
+      <tr><td><code>make proto</code></td><td>Regenerate gRPC Go and TypeScript stubs from <code>proto/</code> definitions</td></tr>
+      <tr><td><code>make test</code></td><td>Run the full Go test suite with race detector enabled</td></tr>
+      <tr><td><code>make lint</code></td><td>Run <code>golangci-lint</code> across all Go packages</td></tr>
+      <tr><td><code>make deb</code></td><td>Package the controller as a <code>.deb</code> file (requires <code>fpm</code>)</td></tr>
+      <tr><td><code>make rpm</code></td><td>Package the controller as an <code>.rpm</code> file (requires <code>fpm</code>)</td></tr>
+      <tr><td><code>make installer</code></td><td>Build the Windows Inno Setup GUI installer for the agent</td></tr>
+      <tr><td><code>make migrate-up</code></td><td>Apply pending database migrations against <code>$DATABASE_URL</code></td></tr>
+      <tr><td><code>make migrate-down</code></td><td>Roll back the last applied database migration</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Controller — Docker Compose</h2>
+  <p>The fastest way to run the controller for evaluation or small deployments:</p>
+  <pre><code># Start the controller and PostgreSQL in the background
+docker compose up -d
+
+# View live logs
+docker compose logs -f controller
+
+# Stop all services
+docker compose down
+
+# Stop and wipe the database volume
+docker compose down -v</code></pre>
+
+  <p>
+    The controller listens on <code>http://localhost:8080</code> (REST API + Web UI) and <code>localhost:9443</code> (gRPC for agents). Open <code>http://localhost:8080</code> to complete the first-run setup wizard.
+  </p>
+
+  <h3>Custom configuration</h3>
+  <pre><code>cp configs/controller.yaml.example configs/controller.yaml
+# Edit configs/controller.yaml, then:
+docker compose up -d</code></pre>
+
+  <h2>Controller — Native (Debian / Ubuntu)</h2>
+  <pre><code># Download the latest release package from GitHub Releases
+curl -LO https://github.com/badskater/encodeswarmr/releases/latest/download/encodeswarmr-controller_amd64.deb
+
+# Install the package (installs binary, systemd unit, and default config)
+sudo dpkg -i encodeswarmr-controller_amd64.deb
+
+# Edit the configuration file
+sudo nano /etc/encodeswarmr/controller.yaml
+
+# Enable and start the service
+sudo systemctl enable --now encodeswarmr-controller
+
+# Check service status
+sudo systemctl status encodeswarmr-controller
+
+# Follow logs
+sudo journalctl -u encodeswarmr-controller -f</code></pre>
+
+  <p>
+    The package installs the binary to <code>/usr/bin/encodeswarmr-controller</code>, the config to <code>/etc/encodeswarmr/controller.yaml</code>, and creates a dedicated <code>encodeswarmr</code> system user.
+  </p>
+
+  <h2>Controller — Native (RHEL / Rocky / AlmaLinux)</h2>
+  <pre><code># Download the latest release RPM from GitHub Releases
+curl -LO https://github.com/badskater/encodeswarmr/releases/latest/download/encodeswarmr-controller_amd64.rpm
+
+# Install the package
+sudo dnf install -y ./encodeswarmr-controller_amd64.rpm
+
+# Edit the configuration file
+sudo nano /etc/encodeswarmr/controller.yaml
+
+# Enable and start the service
+sudo systemctl enable --now encodeswarmr-controller</code></pre>
+
+  <div class="info-box">
+    <strong>SELinux note:</strong> On systems with SELinux enforcing, you may need to allow the controller to bind its ports and access the config directory:
+    <pre><code>sudo semanage port -a -t http_port_t -p tcp 8080
+sudo semanage port -a -t http_port_t -p tcp 9443
+sudo restorecon -Rv /etc/encodeswarmr /usr/bin/encodeswarmr-controller</code></pre>
+    Alternatively, apply the bundled policy module: <code>sudo semodule -i /usr/share/encodeswarmr/encodeswarmr.pp</code>
+  </div>
+
+  <h2>Agent — Linux</h2>
+  <p>A convenience install script is provided that detects your distribution and installs the correct package:</p>
+  <pre><code># Download and run the install script
+curl -fsSL https://github.com/badskater/encodeswarmr/releases/latest/download/install-agent.sh | sudo bash
+
+# The script installs the agent binary and systemd unit, then exits.
+# Configure the agent before starting it:
+sudo nano /etc/encodeswarmr/agent.yaml
+
+# Register the agent with the controller (generates TLS certificates)
+sudo encodeswarmr-agent register \
+  --controller controller.example.com:9443 \
+  --token &lt;enrollment-token&gt;
+
+# Enable and start the agent service
+sudo systemctl enable --now encodeswarmr-agent</code></pre>
+
+  <p>
+    The agent service runs as the <code>encodeswarmr</code> user. Ensure that user has read access to your media shares and write access to <code>work_dir</code> and <code>log_dir</code>.
+  </p>
+
+  <h2>Agent — Windows Server</h2>
+
+  <h3>GUI Installer</h3>
+  <p>
+    Download <code>EncodeSwarmr-Agent-Setup.exe</code> from <a href="https://github.com/badskater/encodeswarmr/releases">GitHub Releases</a> and run it as Administrator. The installer will:
+  </p>
+  <ol>
+    <li>Install the agent binary to <code>C:\Program Files\EncodeSwarmr\</code></li>
+    <li>Create the config directory at <code>C:\ProgramData\EncodeSwarmr\</code></li>
+    <li>Prompt for the controller address and enrollment token</li>
+    <li>Generate mTLS certificates and register with the controller</li>
+    <li>Install and start the <code>EncodeSwarmr Agent</code> Windows service</li>
+  </ol>
+
+  <h3>Manual / Unattended Install</h3>
+  <pre><code># Run as Administrator in PowerShell or cmd
+
+# Install the service and register with the controller
+encodeswarmr-agent.exe install ^
+  --controller controller.example.com:9443 ^
+  --token &lt;enrollment-token&gt;
+
+# Verify the service was created
+sc query EncodeSwarmrAgent
+
+# Start the service
+net start EncodeSwarmrAgent
+
+# Or use PowerShell
+Start-Service EncodeSwarmrAgent</code></pre>
+
+  <p>The configuration file is written to <code>C:\ProgramData\EncodeSwarmr\agent.yaml</code> after registration. Edit it and restart the service to apply changes.</p>
+
+  <pre><code># Restart after editing config
+net stop EncodeSwarmrAgent &amp;&amp; net start EncodeSwarmrAgent
+
+# View the agent log
+Get-Content "C:\ProgramData\EncodeSwarmr\logs\agent.log" -Tail 100 -Wait</code></pre>
+
+  <h2>First Run</h2>
+  <p>Once the controller is running and at least one agent is registered, follow these steps to run your first encode job:</p>
+
+  <ol>
+    <li>
+      <strong>Approve the agent.</strong> Navigate to <strong>Agents</strong> in the web UI. New agents appear in <em>Pending Approval</em> state. Click <strong>Approve</strong> to allow the agent to accept jobs.
+    </li>
+    <li>
+      <strong>Add a source.</strong> Go to <strong>Sources</strong> and add a path to your input media. On Windows agents this is typically a UNC path (<code>\\nas\media\input</code>); on Linux agents it is a mounted filesystem path (<code>/mnt/nas/media/input</code>).
+    </li>
+    <li>
+      <strong>Create an encoding template.</strong> Go to <strong>Templates</strong> and create a new template (or use one of the built-in presets). Templates define the encode parameters, output container, and codec settings.
+    </li>
+    <li>
+      <strong>Set path variables.</strong> If your agents run mixed operating systems (Windows + Linux), configure UNC-to-Linux path translations under <strong>Settings &gt; Path Variables</strong> so both agent types can resolve the same logical path.
+    </li>
+    <li>
+      <strong>Submit a job.</strong> Go to <strong>Jobs &gt; New Job</strong>, select your source file and template, then click <strong>Submit</strong>. The controller will assign the job to an available, approved agent.
+    </li>
+    <li>
+      <strong>Monitor progress.</strong> The job detail page shows real-time encode progress, ETA, current pass, and live log output streamed directly from the agent.
+    </li>
+  </ol>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/configuration">Configuration Reference</a> — Full agent and controller configuration options</li>
+    <li><a href="/docs/agents">Agent Specification</a> — Deep dive into agent internals, GPU detection, and offline operation</li>
+    <li><a href="/docs/deployment-guide">Deployment Guide</a> — Ansible, Terraform, and Kubernetes deployment</li>
+  </ul>
+</DocsLayout>

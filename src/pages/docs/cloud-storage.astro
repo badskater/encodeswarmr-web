@@ -1,0 +1,189 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Cloud Storage">
+  <h1>Cloud Storage</h1>
+  <p>
+    EncodeSwarmr can read source files from and write encoded output to cloud object storage. Sources and output destinations are identified by URI, with credentials resolved from the environment. No special SDK is required on the agent; the Controller downloads source files to agent-local scratch space before encoding, and uploads results when encoding completes.
+  </p>
+
+  <h2>Supported URI Schemes</h2>
+  <table>
+    <thead>
+      <tr><th>Scheme</th><th>Provider</th><th>Example URI</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>s3://</code></td>
+        <td>Amazon S3 (and S3-compatible: MinIO, Backblaze B2, Wasabi, Cloudflare R2)</td>
+        <td><code>s3://my-bucket/media/film.mkv</code></td>
+      </tr>
+      <tr>
+        <td><code>gs://</code></td>
+        <td>Google Cloud Storage</td>
+        <td><code>gs://my-bucket/media/film.mkv</code></td>
+      </tr>
+      <tr>
+        <td><code>az://</code></td>
+        <td>Azure Blob Storage</td>
+        <td><code>az://my-container/media/film.mkv</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Amazon S3</h2>
+
+  <h3>Environment Variables</h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>AWS_ACCESS_KEY_ID</code></td><td>AWS access key ID for the IAM user or role.</td></tr>
+      <tr><td><code>AWS_SECRET_ACCESS_KEY</code></td><td>AWS secret access key.</td></tr>
+      <tr><td><code>AWS_SESSION_TOKEN</code></td><td>Optional. Session token when using temporary credentials from STS or an instance profile.</td></tr>
+      <tr><td><code>AWS_REGION</code></td><td>AWS region for the bucket (e.g., <code>us-east-1</code>). Falls back to <code>us-east-1</code> if not set.</td></tr>
+      <tr><td><code>AWS_ENDPOINT_URL</code></td><td>Optional. Override the S3 endpoint URL for S3-compatible providers (e.g., <code>https://s3.us-west-004.backblazeb2.com</code>).</td></tr>
+    </tbody>
+  </table>
+  <p>
+    On EC2 instances and ECS tasks, credentials are automatically sourced from the instance/task IAM role — no environment variables are required. The Controller and agents both perform credential chain resolution using the standard AWS SDK precedence order.
+  </p>
+
+  <h3>Minimum IAM Policy</h3>
+  <pre><code>&#123;
+  "Version": "2012-10-17",
+  "Statement": [
+    &#123;
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::my-bucket",
+        "arn:aws:s3:::my-bucket/*"
+      ]
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h2>Google Cloud Storage</h2>
+
+  <h3>Environment Variables</h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GOOGLE_APPLICATION_CREDENTIALS</code></td><td>Path to a service account JSON key file. Not required when running on GCE/GKE with a workload identity or service account attached.</td></tr>
+      <tr><td><code>GOOGLE_CLOUD_PROJECT</code></td><td>GCP project ID. Required for some API calls; usually inferred from the credentials file.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Minimum IAM Role</h3>
+  <p>
+    Assign the <strong>Storage Object Admin</strong> role (<code>roles/storage.objectAdmin</code>) to the service account on the target bucket. For read-only sources, <strong>Storage Object Viewer</strong> (<code>roles/storage.objectViewer</code>) is sufficient; a separate role with write access is needed for output buckets.
+  </p>
+
+  <h2>Azure Blob Storage</h2>
+
+  <h3>Environment Variables</h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>AZURE_STORAGE_ACCOUNT</code></td><td>Storage account name (e.g., <code>mystorageaccount</code>).</td></tr>
+      <tr><td><code>AZURE_STORAGE_KEY</code></td><td>Storage account access key. Mutually exclusive with SAS token and managed identity.</td></tr>
+      <tr><td><code>AZURE_STORAGE_SAS_TOKEN</code></td><td>Shared Access Signature token. Provides scoped, time-limited access without exposing the account key.</td></tr>
+      <tr><td><code>AZURE_CLIENT_ID</code></td><td>Client ID of the managed identity or service principal. Used when authenticating via Azure AD.</td></tr>
+      <tr><td><code>AZURE_TENANT_ID</code></td><td>Azure AD tenant ID. Required for service principal authentication.</td></tr>
+      <tr><td><code>AZURE_CLIENT_SECRET</code></td><td>Client secret for service principal authentication.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Minimum RBAC Role</h3>
+  <p>
+    Assign the <strong>Storage Blob Data Contributor</strong> role to the managed identity or service principal on the target container. For read-only source access, <strong>Storage Blob Data Reader</strong> is sufficient.
+  </p>
+
+  <h2>Download-Encode-Upload Flow</h2>
+  <pre><code>┌─────────────────────────────────────────────────────────────┐
+│                         Controller                          │
+│  1. Receives job with s3://bucket/source.mkv                │
+│  2. Resolves agent capable of handling job                  │
+│  3. Dispatches job spec to agent via gRPC                   │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ gRPC job dispatch
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                           Agent                             │
+│  4. Downloads s3://bucket/source.mkv → /scratch/source.mkv  │
+│     (streaming download with SHA-256 verification)          │
+│                                                             │
+│  5. Encodes /scratch/source.mkv → /scratch/output.mkv       │
+│     (using FFmpeg with selected preset or flow)             │
+│                                                             │
+│  6. Uploads /scratch/output.mkv → s3://bucket/output.mkv    │
+│     (multipart upload with automatic retry on part failure) │
+│                                                             │
+│  7. Deletes scratch files                                   │
+│  8. Reports completion to Controller                        │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+  <p>
+    Downloads use range-request streaming so that large files do not require full buffering before encoding begins. The agent starts encoding as soon as the download has buffered a configurable lead time (default: 30 s). Uploads use multipart upload with a part size of 64 MB; failed parts are retried up to 3 times before the job is marked failed.
+  </p>
+
+  <h2>Registering a Cloud Source</h2>
+
+  <h3>Web UI</h3>
+  <ol>
+    <li>Navigate to <strong>Sources &gt; Add Source</strong>.</li>
+    <li>Select <strong>Cloud Storage</strong> as the source type.</li>
+    <li>Enter the full URI (e.g., <code>s3://my-bucket/media/film.mkv</code>).</li>
+    <li>Optionally enable <strong>Auto-Analyze</strong> to immediately queue a MediaInfo and HDR analysis job.</li>
+    <li>Click <strong>Register</strong>. The source appears in the source list with a cloud badge.</li>
+  </ol>
+
+  <h3>REST API</h3>
+  <pre><code>curl -X POST https://controller/api/v1/sources \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "uri": "s3://my-bucket/media/film.mkv",
+    "type": "cloud",
+    "auto_analyze": true,
+    "tags": ["s3", "library"]
+  &#125;'
+
+HTTP/1.1 201 Created
+&#123;
+  "id": "src_cloud001",
+  "uri": "s3://my-bucket/media/film.mkv",
+  "type": "cloud",
+  "provider": "s3",
+  "size_bytes": 15728640000,
+  "analyzed": false,
+  "created_at": "2024-11-14T12:00:00Z"
+&#125;</code></pre>
+
+  <h2>Database Migration</h2>
+  <p>
+    Cloud storage support was introduced in schema migration <code>0012_cloud_sources</code>. If you are upgrading from a version prior to this migration, run the following SQL to add the required columns (or use <code>encodeswarmr-controller migrate up</code> which applies all pending migrations automatically):
+  </p>
+  <pre><code>-- Migration: 0012_cloud_sources
+ALTER TABLE sources ADD COLUMN uri         TEXT;
+ALTER TABLE sources ADD COLUMN type        TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE sources ADD COLUMN provider    TEXT;
+ALTER TABLE sources ADD COLUMN bucket      TEXT;
+ALTER TABLE sources ADD COLUMN object_key  TEXT;
+
+CREATE INDEX idx_sources_type     ON sources (type);
+CREATE INDEX idx_sources_provider ON sources (provider)
+  WHERE provider IS NOT NULL;</code></pre>
+</DocsLayout>

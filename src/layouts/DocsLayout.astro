@@ -9,14 +9,58 @@ interface Props {
 const { title, description = 'EncodeSwarmr Documentation' } = Astro.props;
 
 const sidebar = [
+  { heading: 'Getting Started' },
   { label: 'Overview', href: '/docs' },
-  { label: 'Installation', href: '/docs/installation' },
+  { label: 'Getting Started', href: '/docs/getting-started' },
   { label: 'Configuration', href: '/docs/configuration' },
+
+  { heading: 'Core Features' },
   { label: 'Agents', href: '/docs/agents' },
+  { label: 'Flow Pipeline Editor', href: '/docs/flow-editor' },
+  { label: 'Job Chaining', href: '/docs/job-chaining' },
+  { label: 'Encoding Presets', href: '/docs/presets' },
+  { label: 'Adaptive Chunking', href: '/docs/adaptive-chunking' },
+  { label: 'Batch Import', href: '/docs/batch-import' },
+  { label: 'Cloud Storage', href: '/docs/cloud-storage' },
+
+  { heading: 'API & SDKs' },
   { label: 'API Reference', href: '/docs/api' },
-  { label: 'HDR & Analysis', href: '/docs/hdr' },
-  { label: 'Webhooks', href: '/docs/webhooks' },
+  { label: 'Client SDKs', href: '/docs/sdks' },
+
+  { heading: 'Deployment' },
+  { label: 'Deployment Guide', href: '/docs/deployment-guide' },
+  { label: 'Manual Deployment', href: '/docs/deployment' },
+  { label: 'Ansible', href: '/docs/ansible' },
+  { label: 'Terraform — AWS', href: '/docs/terraform-aws' },
+  { label: 'Terraform — Azure', href: '/docs/terraform-azure' },
+  { label: 'Terraform — GCP', href: '/docs/terraform-gcp' },
+  { label: 'Kubernetes (Helm)', href: '/docs/kubernetes' },
   { label: 'High Availability', href: '/docs/ha' },
+
+  { heading: 'Operations' },
+  { label: 'Webhooks', href: '/docs/webhooks' },
+  { label: 'Email Notifications', href: '/docs/email' },
+  { label: 'Auto-Scaling', href: '/docs/auto-scaling' },
+  { label: 'Intelligent Retry', href: '/docs/retry' },
+  { label: 'Job Preemption', href: '/docs/preemption' },
+  { label: 'Output Validation', href: '/docs/validation' },
+  { label: 'Cost Estimation', href: '/docs/estimation' },
+  { label: 'Job Export & Archival', href: '/docs/export' },
+  { label: 'Template Versioning', href: '/docs/template-versioning' },
+
+  { heading: 'Observability' },
+  { label: 'Grafana Dashboards', href: '/docs/grafana' },
+  { label: 'OpenTelemetry', href: '/docs/tracing' },
+  { label: 'Capacity Planning', href: '/docs/capacity' },
+
+  { heading: 'Customization' },
+  { label: 'Theme & Branding', href: '/docs/theme' },
+  { label: 'Plugin System', href: '/docs/plugins' },
+
+  { heading: 'Architecture' },
+  { label: 'Architecture', href: '/docs/architecture' },
+  { label: 'ADR Index', href: '/docs/adr' },
+  { label: 'Roadmap', href: '/docs/roadmap' },
 ];
 
 const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/docs';
@@ -61,13 +105,19 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/docs';
       <!-- Sidebar -->
       <aside class="hidden w-64 shrink-0 border-r border-surface-800 lg:block">
         <nav class="sticky top-20 p-6">
-          <h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-surface-200">Documentation</h3>
           <ul class="space-y-1">
             {sidebar.map((item) => {
+              if ('heading' in item) {
+                return (
+                  <li class="pt-4 first:pt-0">
+                    <h3 class="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-surface-200">{item.heading}</h3>
+                  </li>
+                );
+              }
               const isActive = currentPath === item.href.replace(/\/$/, '');
               const cls = isActive
-                ? 'block rounded-md px-3 py-2 text-sm transition-colors bg-primary-600/10 font-medium text-primary-400'
-                : 'block rounded-md px-3 py-2 text-sm transition-colors text-surface-200 hover:bg-surface-800 hover:text-white';
+                ? 'block rounded-md px-3 py-1.5 text-sm transition-colors bg-primary-600/10 font-medium text-primary-400'
+                : 'block rounded-md px-3 py-1.5 text-sm transition-colors text-surface-200 hover:bg-surface-800 hover:text-white';
               return (
                 <li>
                   <a href={item.href} class={cls}>

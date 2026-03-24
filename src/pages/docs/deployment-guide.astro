@@ -1,0 +1,154 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Deployment Guide">
+  <h1>Deployment Guide</h1>
+  <p>
+    This guide covers all deployment methods for the EncodeSwarmr system. Choose the approach that best fits your
+    infrastructure and operational requirements.
+  </p>
+
+  <h2>Deployment Options</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Best for</th>
+        <th>Controller</th>
+        <th>Agents</th>
+        <th>HA Support</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/docs/ansible">Ansible (On-Prem)</a></td>
+        <td>Existing servers</td>
+        <td>.deb package</td>
+        <td>Windows (Inno Setup) + Linux (.deb)</td>
+        <td>✅ HAProxy + Patroni</td>
+      </tr>
+      <tr>
+        <td><a href="/docs/ansible#docker-compose-alternative">Ansible (Docker)</a></td>
+        <td>Quick setup</td>
+        <td>Docker Compose</td>
+        <td>.deb or installer</td>
+        <td>✅</td>
+      </tr>
+      <tr>
+        <td><a href="/docs/terraform-aws">Terraform — AWS</a></td>
+        <td>AWS cloud</td>
+        <td>EC2 + Docker</td>
+        <td>EC2 ASG</td>
+        <td>✅ ALB/NLB + Multi-AZ RDS</td>
+      </tr>
+      <tr>
+        <td><a href="/docs/terraform-azure">Terraform — Azure</a></td>
+        <td>Azure cloud</td>
+        <td>Linux VM</td>
+        <td>VMSS</td>
+        <td>✅ LB + Zone-redundant DB</td>
+      </tr>
+      <tr>
+        <td><a href="/docs/terraform-gcp">Terraform — GCP</a></td>
+        <td>Google Cloud</td>
+        <td>Compute Engine</td>
+        <td>MIG</td>
+        <td>✅ Regional LB + HA Cloud SQL</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Architecture Overview</h2>
+  <pre><code>┌─────────────────────────────────────────────────────────┐
+│                    Load Balancer (HA)                     │
+│              HTTP :8080  │  gRPC :9443                   │
+└────────────┬────────────┴────────────┬──────────────────┘
+             │                         │
+    ┌────────▼────────┐      ┌────────▼────────┐
+    │  Controller 01  │      │  Controller 02  │  (HA only)
+    │  HTTP + gRPC    │      │  HTTP + gRPC    │
+    │  + Engine       │      │  + Engine       │
+    └────────┬────────┘      └────────┬────────┘
+             │    PostgreSQL (shared)  │
+             └────────┬───────────────┘
+                      │
+    ┌─────────────────▼─────────────────┐
+    │         PostgreSQL / RDS          │
+    │    (Multi-AZ for HA deployments)  │
+    └───────────────────────────────────┘
+
+    ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │ Agent 01 │  │ Agent 02 │  │ Agent N  │
+    │ Windows  │  │ Linux    │  │ Linux    │
+    │ x265/264 │  │ ffmpeg   │  │ svt-av1  │
+    └────┬─────┘  └────┬─────┘  └────┬─────┘
+         │             │             │
+    ┌────▼─────────────▼─────────────▼────┐
+    │          NAS / EFS / Filestore       │
+    │     (shared media + encode output)   │
+    └─────────────────────────────────────┘</code></pre>
+
+  <h2>Quick Start by Method</h2>
+
+  <h3>On-Premise (Ansible)</h3>
+  <pre><code>cd deploy/ansible
+cp inventory/hosts.yml.example inventory/hosts.yml
+# Edit hosts.yml with your server IPs
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml</code></pre>
+
+  <h3>AWS</h3>
+  <pre><code>cd deploy/terraform/aws
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars
+terraform init &amp;&amp; terraform apply</code></pre>
+
+  <h3>Azure</h3>
+  <pre><code>cd deploy/terraform/azure
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars
+terraform init &amp;&amp; terraform apply</code></pre>
+
+  <h3>GCP</h3>
+  <pre><code>cd deploy/terraform/gcp
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars
+terraform init &amp;&amp; terraform apply</code></pre>
+
+  <h2>Post-Deployment Steps</h2>
+  <p>Regardless of deployment method, complete the following after your initial deployment:</p>
+  <ol>
+    <li><strong>Create admin user</strong>: Navigate to <code>http://&lt;controller&gt;:8080</code> and complete the setup wizard</li>
+    <li><strong>Approve agents</strong>: Go to the Agents page and approve pending agents</li>
+    <li><strong>Configure path mappings</strong>: Set up UNC → Linux path translations (if using mixed OS agents)</li>
+    <li><strong>Create templates</strong>: Use the built-in starter templates or create custom encoding templates</li>
+    <li><strong>Test</strong>: Create a source, run an encode job, verify output</li>
+    <li><strong>Enable notifications</strong>: Configure webhook or email notifications for job completion and failures</li>
+  </ol>
+
+  <h2>Upgrading</h2>
+
+  <h3>Ansible</h3>
+  <pre><code>ansible-playbook playbooks/upgrade.yml</code></pre>
+  <p>Upgrades are rolling and health-check gated — the playbook verifies each controller or agent is healthy before moving to the next host.</p>
+
+  <h3>Terraform</h3>
+  <p>Update the <code>encodeswarmr_version</code> variable in your <code>terraform.tfvars</code> file, then apply:</p>
+  <pre><code>terraform apply</code></pre>
+
+  <h3>Push Upgrade (Agents)</h3>
+  <p>Individual agents can be upgraded remotely via the API without needing to re-run Ansible or Terraform:</p>
+  <pre><code>POST /api/v1/agents/&#123;id&#125;/upgrade</code></pre>
+  <p>This triggers the agent to download and apply the latest release, then restart itself.</p>
+
+  <h2>Security</h2>
+  <div class="info-box">
+    <p>All deployment methods include the following security controls out of the box:</p>
+    <ul>
+      <li><strong>mTLS</strong>: Auto-generated CA + controller/agent certificates for all gRPC communication</li>
+      <li><strong>Security headers</strong>: CSP, X-Frame-Options, HSTS, X-Content-Type-Options on all HTTP responses</li>
+      <li><strong>API keys</strong>: Programmatic access via Bearer tokens (SHA-256 hashed at rest)</li>
+      <li><strong>OIDC</strong>: Optional SSO with role mapping from group claims</li>
+    </ul>
+    <p>See <a href="/docs/ha">High Availability Setup</a> for HA-specific configuration details.</p>
+  </div>
+</DocsLayout>

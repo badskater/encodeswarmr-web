@@ -1,0 +1,196 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Terraform — GCP">
+  <h1>Terraform — GCP</h1>
+  <p>
+    The GCP Terraform module deploys EncodeSwarmr on Google Cloud Platform using Compute Engine for the controller
+    and a Managed Instance Group for agents, Cloud SQL for PostgreSQL, Filestore for shared media storage, and a
+    regional HTTP(S) and TCP load balancer.
+  </p>
+
+  <h2>Architecture</h2>
+  <pre><code>                    ┌───────────────────────────────────────┐
+                    │         GCP Project                    │
+                    │                                        │
+                    │   ┌─────────────────────────────────┐  │
+                    │   │     VPC Network                  │  │
+                    │   │                                  │  │
+                    │   │  Public / External               │  │
+                    │   │  ┌────────────────────────────┐  │  │
+                    │   │  │  Regional HTTP(S) LB        │  │  │
+                    │   │  │  (port 8080 — HTTP)         │  │  │
+                    │   │  │  Regional TCP LB             │  │  │
+                    │   │  │  (port 9443 — gRPC)         │  │  │
+                    │   │  └──────────┬─────────────────┘  │  │
+                    │   │             │                     │  │
+                    │   │  Private Subnet                   │  │
+                    │   │  ┌──────────▼─────────────────┐  │  │
+                    │   │  │  Compute Engine: Controller │  │  │
+                    │   │  │  (n2-standard-2)            │  │  │
+                    │   │  │  (+ 2nd instance, HA mode)  │  │  │
+                    │   │  └──────────┬─────────────────┘  │  │
+                    │   │             │                     │  │
+                    │   │  ┌──────────▼─────────────────┐  │  │
+                    │   │  │  Cloud SQL PostgreSQL        │  │  │
+                    │   │  │  (private IP, HA replica)   │  │  │
+                    │   │  └────────────────────────────┘  │  │
+                    │   │                                  │  │
+                    │   │  Agent Subnet                    │  │
+                    │   │  ┌────────────────────────────┐  │  │
+                    │   │  │  Managed Instance Group     │  │  │
+                    │   │  │  (c2-standard-8 agents)     │  │  │
+                    │   │  └────────────────────────────┘  │  │
+                    │   │                                  │  │
+                    │   │  ┌────────────────────────────┐  │  │
+                    │   │  │  Filestore (shared media)   │  │  │
+                    │   │  └────────────────────────────┘  │  │
+                    │   └─────────────────────────────────┘  │
+                    └───────────────────────────────────────┘</code></pre>
+
+  <h2>Standard vs HA Deployment</h2>
+  <p>
+    <strong>Standard mode</strong> deploys a single controller Compute Engine instance with a zonal Cloud SQL
+    instance. Suitable for non-critical workloads.
+  </p>
+  <p>
+    <strong>HA mode</strong> deploys two controller instances across separate zones, a regional (HA) Cloud SQL
+    instance with automatic failover, and a regional Managed Instance Group for agents spread across all zones in
+    the selected region.
+  </p>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li>Terraform 1.6 or later</li>
+    <li>Google Cloud SDK (<code>gcloud</code>) installed and authenticated</li>
+    <li>A GCP project with billing enabled</li>
+    <li>A service account with <strong>Editor</strong> role or the following granular roles: Compute Admin, Cloud SQL Admin, Filestore Editor, Service Account User, IAP-secured Tunnel User</li>
+    <li>Application Default Credentials configured: <code>gcloud auth application-default login</code></li>
+  </ul>
+
+  <h2>Enable Required APIs</h2>
+  <pre><code>gcloud services enable \
+  compute.googleapis.com \
+  sqladmin.googleapis.com \
+  file.googleapis.com \
+  servicenetworking.googleapis.com \
+  iap.googleapis.com \
+  --project=my-project-id</code></pre>
+
+  <h2>Quick Start</h2>
+  <pre><code># 1. Navigate to the GCP Terraform directory
+cd deploy/terraform/gcp
+
+# 2. Copy and configure variables
+cp terraform.tfvars.example terraform.tfvars
+$EDITOR terraform.tfvars</code></pre>
+
+  <pre><code># terraform.tfvars
+project_id           = "my-project-id"
+region               = "us-central1"
+zone                 = "us-central1-a"
+encodeswarmr_version = "1.2.0"
+
+# Controller
+controller_machine_type = "n2-standard-2"
+
+# Agents
+agent_machine_type   = "c2-standard-8"
+agent_min_replicas   = 1
+agent_max_replicas   = 10
+
+# Cloud SQL
+db_tier              = "db-g1-small"
+db_user              = "encodeswarmr"
+db_password          = "changeme"
+
+# Filestore
+filestore_tier       = "STANDARD"
+filestore_capacity_gb = 1024</code></pre>
+
+  <pre><code># 3. Initialise and apply
+terraform init
+terraform plan
+terraform apply</code></pre>
+
+  <h2>Enabling HA</h2>
+  <pre><code># terraform.tfvars additions for HA
+ha_enabled           = true
+controller_count     = 2
+db_availability_type = "REGIONAL"   # Cloud SQL HA
+agent_zones          = ["us-central1-a", "us-central1-b", "us-central1-c"]</code></pre>
+
+  <pre><code>terraform apply -var="ha_enabled=true"</code></pre>
+
+  <h2>Remote State on GCS</h2>
+  <pre><code># Create a GCS bucket for state
+gsutil mb -p my-project-id -l us-central1 gs://my-tfstate-bucket
+gsutil versioning set on gs://my-tfstate-bucket</code></pre>
+
+  <pre><code># backend.tf
+terraform &#123;
+  backend "gcs" &#123;
+    bucket = "my-tfstate-bucket"
+    prefix = "encodeswarmr/gcp"
+  &#125;
+&#125;</code></pre>
+
+  <h2>SSH Access via IAP</h2>
+  <p>Instances have no external IP addresses. Use Identity-Aware Proxy (IAP) tunnelling for SSH access:</p>
+  <pre><code># SSH to the controller via IAP
+gcloud compute ssh encodeswarmr-controller-01 \
+  --tunnel-through-iap \
+  --project=my-project-id \
+  --zone=us-central1-a
+
+# Port-forward the web UI to localhost for initial configuration
+gcloud compute start-iap-tunnel encodeswarmr-controller-01 8080 \
+  --local-host-port=localhost:8080 \
+  --zone=us-central1-a \
+  --project=my-project-id</code></pre>
+
+  <h2>Cost Estimate</h2>
+
+  <h3>Standard Deployment (us-central1, approximate)</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Controller VM</td><td>n2-standard-2 (On-Demand)</td><td>~$50</td></tr>
+      <tr><td>Agent VMs</td><td>2 × c2-standard-8</td><td>~$560</td></tr>
+      <tr><td>Cloud SQL</td><td>db-g1-small, 20 GB SSD (zonal)</td><td>~$25</td></tr>
+      <tr><td>HTTP(S) LB</td><td>Regional</td><td>~$18</td></tr>
+      <tr><td>TCP LB</td><td>Regional</td><td>~$18</td></tr>
+      <tr><td>Filestore</td><td>1 TB Standard</td><td>~$200</td></tr>
+      <tr><td>Egress / NAT</td><td>variable</td><td>~$20</td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td><strong>~$891/mo</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>HA Deployment (us-central1, approximate)</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Controller VMs</td><td>2 × n2-standard-2</td><td>~$100</td></tr>
+      <tr><td>Agent VMs</td><td>4 × c2-standard-8</td><td>~$1,120</td></tr>
+      <tr><td>Cloud SQL</td><td>db-g1-small, 20 GB SSD (regional HA)</td><td>~$50</td></tr>
+      <tr><td>LBs</td><td>HTTP(S) + TCP Regional</td><td>~$36</td></tr>
+      <tr><td>Filestore</td><td>1 TB Standard</td><td>~$200</td></tr>
+      <tr><td>Egress / NAT</td><td>variable</td><td>~$40</td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td><strong>~$1,546/mo</strong></td></tr>
+    </tbody>
+  </table>
+  <p>Use Spot (preemptible) VMs for agents with <code>agent_use_spot = true</code> to reduce agent costs by up to 80%.</p>
+
+  <h2>Cleanup</h2>
+  <pre><code># Destroy all resources
+terraform destroy
+
+# If Filestore deletion is blocked by NFS mounts:
+gcloud filestore instances delete encodeswarmr-media \
+  --zone=us-central1-a \
+  --project=my-project-id</code></pre>
+</DocsLayout>

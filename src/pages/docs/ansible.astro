@@ -1,0 +1,350 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Ansible Deployment">
+  <h1>Ansible Deployment</h1>
+  <p>
+    The EncodeSwarmr Ansible collection automates installation and configuration of controllers and agents across
+    on-premises Linux hosts (and Windows agents via WinRM). Playbooks are idempotent and safe to re-run.
+  </p>
+
+  <h2>Deployment Modes</h2>
+  <table>
+    <thead>
+      <tr><th>Mode</th><th>Description</th><th>Use Case</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Standard (bare-metal)</td>
+        <td>Installs .deb/.rpm packages and configures systemd services</td>
+        <td>Production on-prem with existing OS</td>
+      </tr>
+      <tr>
+        <td>Docker Compose</td>
+        <td>Deploys controller via Docker Compose on the target host</td>
+        <td>Quick setup; easier updates</td>
+      </tr>
+      <tr>
+        <td>HA with Patroni</td>
+        <td>Two controllers + Patroni-managed PostgreSQL + HAProxy</td>
+        <td>Production with fault tolerance</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Prerequisites</h2>
+
+  <h3>Control Node (where you run Ansible)</h3>
+  <ul>
+    <li>Ansible 2.15 or later</li>
+    <li>Python packages: <code>psycopg2-binary</code>, <code>pywinrm</code> (for Windows agents), <code>boto3</code> (optional, for dynamic inventory)</li>
+    <li>Ansible collections: <code>community.general</code>, <code>community.postgresql</code>, <code>ansible.windows</code></li>
+    <li>SSH access to all Linux target hosts (key-based recommended)</li>
+    <li>WinRM configured on all Windows agent hosts (see Windows section)</li>
+  </ul>
+
+  <pre><code># Install Ansible and Python dependencies
+pip install ansible psycopg2-binary pywinrm
+
+# Install required Ansible collections
+ansible-galaxy collection install community.general community.postgresql ansible.windows</code></pre>
+
+  <h3>Other Requirements</h3>
+  <ul>
+    <li>All target hosts must be able to reach the controller on ports <strong>8080</strong> and <strong>9443</strong></li>
+    <li>Shared NFS/SMB storage mounted at the same path on controller and all Linux agents</li>
+    <li>PostgreSQL 15+ accessible from the controller host (can be managed by Ansible or external)</li>
+  </ul>
+
+  <h2>Quick Start — Standard Deployment</h2>
+  <pre><code># 1. Clone the repository
+git clone https://github.com/badskater/encodeswarmr.git
+cd encodeswarmr/deploy/ansible
+
+# 2. Copy and edit the inventory
+cp inventory/hosts.yml.example inventory/hosts.yml
+$EDITOR inventory/hosts.yml
+
+# 3. Copy and edit variables
+cp group_vars/all.yml.example group_vars/all.yml
+$EDITOR group_vars/all.yml
+
+# 4. Run the full deployment
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml</code></pre>
+
+  <h2>Available Playbooks</h2>
+
+  <h3><code>playbooks/site.yml</code></h3>
+  <p>Full deployment: configures all hosts in one run. Equivalent to running <code>controller.yml</code> then <code>agents.yml</code>.</p>
+  <pre><code>ansible-playbook -i inventory/hosts.yml playbooks/site.yml</code></pre>
+
+  <h3><code>playbooks/controller.yml</code></h3>
+  <p>Deploy or update the controller only. Skips agent hosts entirely.</p>
+  <pre><code>ansible-playbook -i inventory/hosts.yml playbooks/controller.yml</code></pre>
+
+  <h3><code>playbooks/agents.yml</code></h3>
+  <p>Deploy or update agents only. Use <code>--limit</code> to target specific hosts or groups:</p>
+  <pre><code># All agents
+ansible-playbook -i inventory/hosts.yml playbooks/agents.yml
+
+# Specific Linux agent group
+ansible-playbook -i inventory/hosts.yml playbooks/agents.yml --limit linux_agents
+
+# Specific Windows agent group
+ansible-playbook -i inventory/hosts.yml playbooks/agents.yml --limit windows_agents
+
+# Single host
+ansible-playbook -i inventory/hosts.yml playbooks/agents.yml --limit encode-win-01</code></pre>
+
+  <h3><code>playbooks/ha.yml</code></h3>
+  <p>Configure high-availability controller pair. Two sub-modes are supported:</p>
+
+  <h4>Standalone HA (HAProxy + two controllers)</h4>
+  <pre><code>ansible-playbook -i inventory/hosts.yml playbooks/ha.yml</code></pre>
+
+  <h4>HA with Patroni (HAProxy + two controllers + Patroni PostgreSQL)</h4>
+  <pre><code>ansible-playbook -i inventory/hosts.yml playbooks/ha.yml \
+  -e "patroni_enabled=true"</code></pre>
+
+  <h3><code>playbooks/upgrade.yml</code></h3>
+  <p>Rolling upgrade with health-check gates. The playbook upgrades one host at a time and waits for the service to report healthy before continuing.</p>
+  <pre><code># Upgrade to latest release
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml
+
+# Pin to a specific version
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml \
+  -e "encodeswarmr_version=1.2.0"
+
+# Upgrade only controllers
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml \
+  --tags controller
+
+# Upgrade only agents
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml \
+  --tags agent</code></pre>
+
+  <h3><code>playbooks/docker-compose/deploy.yml</code></h3>
+  <p>Alternative playbook that deploys the controller as a Docker Compose stack instead of a native package.</p>
+  <pre><code>ansible-playbook -i inventory/hosts.yml \
+  playbooks/docker-compose/deploy.yml</code></pre>
+
+  <h2>Variable Reference</h2>
+
+  <h3><code>group_vars/all.yml</code></h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>encodeswarmr_version</code></td><td><code>latest</code></td><td>Release tag to install (e.g. <code>1.2.0</code>)</td></tr>
+      <tr><td><code>encodeswarmr_user</code></td><td><code>encodeswarmr</code></td><td>System user that runs the service</td></tr>
+      <tr><td><code>encodeswarmr_config_dir</code></td><td><code>/etc/encodeswarmr</code></td><td>Directory for config files and certs</td></tr>
+      <tr><td><code>encodeswarmr_data_dir</code></td><td><code>/var/lib/encodeswarmr</code></td><td>Persistent data directory</td></tr>
+      <tr><td><code>db_host</code></td><td><code>localhost</code></td><td>PostgreSQL host</td></tr>
+      <tr><td><code>db_port</code></td><td><code>5432</code></td><td>PostgreSQL port</td></tr>
+      <tr><td><code>db_name</code></td><td><code>encodeswarmr</code></td><td>Database name</td></tr>
+      <tr><td><code>db_user</code></td><td><code>encodeswarmr</code></td><td>Database user</td></tr>
+      <tr><td><code>db_password</code></td><td><em>required</em></td><td>Database password (use Ansible Vault)</td></tr>
+      <tr><td><code>secret_key</code></td><td><em>required</em></td><td>32-byte random secret for session signing</td></tr>
+      <tr><td><code>mtls_enabled</code></td><td><code>true</code></td><td>Generate and distribute mTLS certificates</td></tr>
+      <tr><td><code>log_level</code></td><td><code>info</code></td><td>Log verbosity: <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3><code>group_vars/controllers.yml</code></h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>controller_http_port</code></td><td><code>8080</code></td><td>HTTP listener port</td></tr>
+      <tr><td><code>controller_grpc_port</code></td><td><code>9443</code></td><td>gRPC/mTLS listener port</td></tr>
+      <tr><td><code>ha_enabled</code></td><td><code>false</code></td><td>Enable HA mode (requires two controller hosts)</td></tr>
+      <tr><td><code>ha_lock_refresh</code></td><td><code>5s</code></td><td>Advisory lock refresh interval</td></tr>
+      <tr><td><code>ha_lock_timeout</code></td><td><code>30s</code></td><td>Stale lock expiry timeout</td></tr>
+      <tr><td><code>install_postgres</code></td><td><code>true</code></td><td>Install and configure PostgreSQL on the controller host</td></tr>
+      <tr><td><code>install_haproxy</code></td><td><code>false</code></td><td>Install HAProxy in front of controller pair (HA mode)</td></tr>
+      <tr><td><code>oidc_enabled</code></td><td><code>false</code></td><td>Enable OIDC SSO</td></tr>
+      <tr><td><code>oidc_issuer</code></td><td><code>""</code></td><td>OIDC issuer URL</td></tr>
+      <tr><td><code>oidc_client_id</code></td><td><code>""</code></td><td>OIDC client ID</td></tr>
+      <tr><td><code>oidc_client_secret</code></td><td><code>""</code></td><td>OIDC client secret (use Ansible Vault)</td></tr>
+    </tbody>
+  </table>
+
+  <h3><code>group_vars/agents.yml</code></h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>agent_max_workers</code></td><td><code>4</code></td><td>Concurrent encode chunks per agent</td></tr>
+      <tr><td><code>agent_work_dir</code></td><td><code>/var/tmp/encodeswarmr</code></td><td>Temp directory for chunk working files</td></tr>
+      <tr><td><code>agent_tools_dir</code></td><td><code>/usr/local/bin</code></td><td>Directory where encode tools are installed</td></tr>
+      <tr><td><code>install_ffmpeg</code></td><td><code>true</code></td><td>Install FFmpeg via package manager</td></tr>
+      <tr><td><code>install_svt_av1</code></td><td><code>false</code></td><td>Build and install SVT-AV1 from source</td></tr>
+      <tr><td><code>svt_av1_version</code></td><td><code>1.8.0</code></td><td>SVT-AV1 version to build</td></tr>
+      <tr><td><code>controller_address</code></td><td><em>required</em></td><td>Controller gRPC address, e.g. <code>controller.example.com:9443</code></td></tr>
+      <tr><td><code>enrollment_token</code></td><td><em>required</em></td><td>Agent enrollment token from controller UI</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Windows Agent Setup via WinRM</h2>
+  <p>Run these commands on each Windows agent host to enable WinRM for Ansible:</p>
+  <pre><code># PowerShell — run as Administrator on each Windows agent
+
+# Enable WinRM with HTTPS
+winrm quickconfig -q
+winrm set winrm/config/service '@&#123;AllowUnencrypted="false"&#125;'
+winrm set winrm/config/service/auth '@&#123;Basic="true"&#125;'
+
+# Create a self-signed certificate for WinRM HTTPS
+$cert = New-SelfSignedCertificate `
+  -DnsName $env:COMPUTERNAME `
+  -CertStoreLocation "cert:\LocalMachine\My"
+
+# Create HTTPS listener
+New-Item -Path WSMan:\Localhost\Listener `
+  -Transport HTTPS `
+  -Address * `
+  -CertificateThumbPrint $cert.Thumbprint `
+  -Force
+
+# Open firewall
+netsh advfirewall firewall add rule name="WinRM HTTPS" `
+  dir=in action=allow protocol=TCP localport=5986
+
+# Restart WinRM
+Restart-Service WinRM</code></pre>
+
+  <p>Add Windows hosts to your Ansible inventory with WinRM connection settings:</p>
+  <pre><code># inventory/hosts.yml
+all:
+  children:
+    controllers:
+      hosts:
+        controller-01:
+          ansible_host: 192.168.1.10
+    agents:
+      children:
+        linux_agents:
+          hosts:
+            encode-linux-01:
+              ansible_host: 192.168.1.20
+        windows_agents:
+          hosts:
+            encode-win-01:
+              ansible_host: 192.168.1.30
+              ansible_user: Administrator
+              ansible_password: "&#123;&#123; vault_win_password &#125;&#125;"
+              ansible_connection: winrm
+              ansible_winrm_transport: ntlm
+              ansible_winrm_port: 5986
+              ansible_winrm_scheme: https
+              ansible_winrm_server_cert_validation: ignore</code></pre>
+
+  <h2>mTLS Certificates</h2>
+  <p>
+    When <code>mtls_enabled: true</code> (the default), Ansible automatically generates a CA and all certificates on
+    the Ansible control node and distributes them to the appropriate hosts. Certificates are regenerated only if
+    missing or expired.
+  </p>
+  <p>To use your own pre-generated certificates instead, set <code>mtls_enabled: false</code> and provide the
+    certificate paths via <code>tls_ca_cert</code>, <code>tls_server_cert</code>, <code>tls_server_key</code>,
+    <code>tls_agent_cert</code>, and <code>tls_agent_key</code> variables.</p>
+
+  <h2>Docker Compose Alternative</h2>
+  <p>
+    The <code>docker-compose/deploy.yml</code> playbook configures Docker on the controller host and deploys
+    EncodeSwarmr as a Compose stack. This is useful when you prefer container-based management.
+  </p>
+  <pre><code># group_vars/controllers.yml additions for Docker mode
+deploy_mode: docker-compose
+docker_compose_dir: /opt/encodeswarmr
+docker_image_tag: "&#123;&#123; encodeswarmr_version &#125;&#125;"</code></pre>
+
+  <h2>Upgrading</h2>
+  <pre><code># Rolling upgrade — health-check gated, one host at a time
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml
+
+# Skip confirmation prompts
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml -e "auto_confirm=true"
+
+# Dry-run (check mode)
+ansible-playbook -i inventory/hosts.yml playbooks/upgrade.yml --check</code></pre>
+
+  <h2>Tags Reference</h2>
+  <table>
+    <thead>
+      <tr><th>Tag</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>controller</code></td><td>All controller tasks</td></tr>
+      <tr><td><code>agent</code></td><td>All agent tasks</td></tr>
+      <tr><td><code>packages</code></td><td>Install/upgrade packages only</td></tr>
+      <tr><td><code>config</code></td><td>Write configuration files only (no package changes)</td></tr>
+      <tr><td><code>certs</code></td><td>Generate and distribute mTLS certificates</td></tr>
+      <tr><td><code>postgres</code></td><td>PostgreSQL installation and database setup</td></tr>
+      <tr><td><code>haproxy</code></td><td>HAProxy installation and configuration</td></tr>
+      <tr><td><code>systemd</code></td><td>Manage systemd unit files and service state</td></tr>
+      <tr><td><code>tools</code></td><td>Install encode tools (FFmpeg, SVT-AV1, etc.)</td></tr>
+      <tr><td><code>never</code></td><td>Tasks skipped by default; use <code>--tags never</code> to run (e.g. reset DB)</td></tr>
+    </tbody>
+  </table>
+  <pre><code># Example: only update config files without touching packages
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags config
+
+# Example: only regenerate certificates
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags certs</code></pre>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>Certificate Errors</h3>
+  <p>If agents fail to connect with TLS errors:</p>
+  <pre><code># Force certificate regeneration
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml \
+  --tags certs -e "force_cert_regen=true"</code></pre>
+
+  <h3>Controller Not Starting</h3>
+  <pre><code># Check service status and logs
+ansible controllers -i inventory/hosts.yml \
+  -m shell -a "systemctl status encodeswarmr-controller"
+
+ansible controllers -i inventory/hosts.yml \
+  -m shell -a "journalctl -u encodeswarmr-controller -n 50"</code></pre>
+
+  <h3>Agent Not Starting</h3>
+  <pre><code># Linux agent
+ansible linux_agents -i inventory/hosts.yml \
+  -m shell -a "journalctl -u encodeswarmr-agent -n 50"
+
+# Windows agent (via WinRM)
+ansible windows_agents -i inventory/hosts.yml \
+  -m win_shell -a "Get-EventLog -LogName Application -Source EncodeSwarmr -Newest 20 | Format-List"</code></pre>
+
+  <h3>WinRM Connection Issues</h3>
+  <pre><code># Test WinRM connectivity from the control node
+ansible encode-win-01 -i inventory/hosts.yml -m win_ping
+
+# If it fails, verify WinRM is running on the Windows host:
+# (run on Windows host)
+Get-Service WinRM
+Test-WSMan -ComputerName localhost -UseSSL</code></pre>
+
+  <h3>PostgreSQL Connection Refused</h3>
+  <pre><code># Check PostgreSQL is listening
+ansible controllers -i inventory/hosts.yml \
+  -m shell -a "pg_isready -h localhost -p 5432"
+
+# Check pg_hba.conf allows the encodeswarmr user
+ansible controllers -i inventory/hosts.yml \
+  -m shell -a "grep encodeswarmr /etc/postgresql/*/main/pg_hba.conf"</code></pre>
+
+  <h3>NFS Mount Issues on Agents</h3>
+  <pre><code># Verify NFS mount is active on all agent hosts
+ansible agents -i inventory/hosts.yml \
+  -m shell -a "mountpoint -q /mnt/media &amp;&amp; echo OK || echo NOT MOUNTED"
+
+# Re-mount if needed
+ansible agents -i inventory/hosts.yml \
+  -m shell -a "mount /mnt/media" --become</code></pre>
+</DocsLayout>

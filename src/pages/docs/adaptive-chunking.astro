@@ -1,0 +1,187 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Adaptive Chunking">
+  <h1>Adaptive Chunking</h1>
+  <p>
+    Adaptive chunking is EncodeSwarmr's mechanism for intelligently splitting a source video into segments before parallel encoding. Unlike fixed chunking — which divides a file into equal-duration pieces regardless of content — adaptive chunking calibrates chunk duration based on the source's native frame rate and adjusts boundaries to align with scene cuts detected by PySceneDetect.
+  </p>
+  <p>
+    The result is chunks that are easier to encode (cuts at scene boundaries avoid motion-vector bleed across segments), produce cleaner joins, and distribute more evenly across agents.
+  </p>
+
+  <h2>How Adaptive Chunking Works</h2>
+  <ol>
+    <li>
+      <strong>Baseline FPS measurement</strong> — The Controller reads the source frame rate via MediaInfo. For variable-frame-rate (VFR) sources it uses the average frame rate reported over the first 60 seconds of content.
+    </li>
+    <li>
+      <strong>Target duration formula</strong> — The target chunk duration in seconds is computed as:
+      <pre><code>target_duration = target_frames / fps</code></pre>
+      where <code>target_frames</code> is a configurable parameter (default: <code>1800</code> frames, giving ~60 s at 30 fps or ~75 s at 24 fps).
+    </li>
+    <li>
+      <strong>Boundary alignment</strong> — If scene detection data is available, the nearest scene cut within ±15 s of each calculated boundary is used instead. This avoids splitting mid-scene and improves visual quality at segment joins.
+    </li>
+    <li>
+      <strong>Min/max enforcement</strong> — After alignment, any chunk shorter than <code>min_chunk_seconds</code> is merged with its neighbour, and any chunk longer than <code>max_chunk_seconds</code> is force-split at the raw calculated boundary (ignoring scene alignment for that split only).
+    </li>
+    <li>
+      <strong>Rebalancing</strong> — The final chunk list is rebalanced so that the last chunk is never shorter than 50% of the target duration. If it would be, its frames are distributed to the preceding chunk.
+    </li>
+  </ol>
+
+  <h2>Comparison with Fixed Chunking</h2>
+  <table>
+    <thead>
+      <tr><th>Property</th><th>Fixed Chunking</th><th>Adaptive Chunking</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Chunk duration</td>
+        <td>Constant (e.g., exactly 60 s)</td>
+        <td>Variable; calibrated to frame count and scene boundaries</td>
+      </tr>
+      <tr>
+        <td>Scene awareness</td>
+        <td>None</td>
+        <td>Aligns splits to nearest scene cut within a configurable window</td>
+      </tr>
+      <tr>
+        <td>Join artefacts</td>
+        <td>Possible motion-vector bleed at splits</td>
+        <td>Minimised by scene-boundary alignment</td>
+      </tr>
+      <tr>
+        <td>Agent distribution</td>
+        <td>Equal-duration, unequal complexity</td>
+        <td>Duration varies but complexity is more balanced</td>
+      </tr>
+      <tr>
+        <td>Configuration</td>
+        <td>Single <code>chunk_seconds</code> value</td>
+        <td><code>target_frames</code>, <code>min_chunk_seconds</code>, <code>max_chunk_seconds</code>, scene window</td>
+      </tr>
+      <tr>
+        <td>Requires scene detection</td>
+        <td>No</td>
+        <td>No (falls back to calculated boundaries if no scene data)</td>
+      </tr>
+      <tr>
+        <td>Overhead</td>
+        <td>None</td>
+        <td>Scene detection pass adds ~5–15% of source duration</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Configuration</h2>
+  <p>
+    Adaptive chunking is configured per-flow on the <code>ChunkedEncode</code> node, or globally in the Controller configuration file. The following JSON represents the full configuration object:
+  </p>
+  <pre><code>&#123;
+  "chunking": &#123;
+    "mode": "adaptive",
+    "target_frames": 1800,
+    "min_chunk_seconds": 20,
+    "max_chunk_seconds": 180,
+    "scene_alignment_window_seconds": 15,
+    "rebalance_tail": true
+  &#125;
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>mode</code></td>
+        <td>string</td>
+        <td><code>"adaptive"</code></td>
+        <td><code>"adaptive"</code> or <code>"fixed"</code>. When <code>"fixed"</code>, only <code>chunk_seconds</code> is used.</td>
+      </tr>
+      <tr>
+        <td><code>target_frames</code></td>
+        <td>integer</td>
+        <td><code>1800</code></td>
+        <td>Target number of frames per chunk. The duration in seconds varies by FPS.</td>
+      </tr>
+      <tr>
+        <td><code>min_chunk_seconds</code></td>
+        <td>integer</td>
+        <td><code>20</code></td>
+        <td>Minimum allowed chunk duration. Shorter chunks are merged with their neighbour.</td>
+      </tr>
+      <tr>
+        <td><code>max_chunk_seconds</code></td>
+        <td>integer</td>
+        <td><code>180</code></td>
+        <td>Maximum allowed chunk duration. Longer chunks are force-split regardless of scene boundaries.</td>
+      </tr>
+      <tr>
+        <td><code>scene_alignment_window_seconds</code></td>
+        <td>integer</td>
+        <td><code>15</code></td>
+        <td>Search radius (±seconds) around each calculated boundary when looking for a scene cut to align to.</td>
+      </tr>
+      <tr>
+        <td><code>rebalance_tail</code></td>
+        <td>boolean</td>
+        <td><code>true</code></td>
+        <td>When true, the final chunk is merged with its predecessor if it would be shorter than 50% of the target duration.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Global Defaults</h2>
+  <p>
+    You can set global chunking defaults in the Controller's YAML configuration file. Per-flow node settings override the global defaults.
+  </p>
+  <pre><code>controller:
+  chunking:
+    mode: adaptive
+    target_frames: 1800
+    min_chunk_seconds: 20
+    max_chunk_seconds: 180
+    scene_alignment_window_seconds: 15
+    rebalance_tail: true</code></pre>
+
+  <h2>Min/Max Chunk Sizes Explained</h2>
+  <p>
+    The <code>min_chunk_seconds</code> guard exists because very short chunks have disproportionate overhead: the agent must initialise the FFmpeg process, seek to the start point, and flush the output container for every chunk. In practice, chunks shorter than ~20 seconds spend more time on overhead than on useful encoding work.
+  </p>
+  <p>
+    The <code>max_chunk_seconds</code> guard prevents any single chunk from monopolising an agent for too long. Without a cap, a low-FPS source (e.g., 10 fps) with <code>target_frames=1800</code> would produce 3-minute chunks — acceptable — but a pathological case with very long scenes could produce a single chunk spanning the entire film.
+  </p>
+
+  <h2>UI Integration</h2>
+  <p>
+    The <code>ChunkedEncode</code> node config panel exposes adaptive chunking controls:
+  </p>
+  <ul>
+    <li><strong>Target Frames slider</strong> — Drag to set <code>target_frames</code> between 600 and 7200. A live preview shows the estimated chunk count and average duration for the currently selected source.</li>
+    <li><strong>Min / Max inputs</strong> — Numeric inputs for <code>min_chunk_seconds</code> and <code>max_chunk_seconds</code>. The UI prevents <code>min</code> from exceeding <code>max</code>.</li>
+    <li><strong>Chunk Preview</strong> — After scene detection completes on the source, the preview renders a timeline bar showing each chunk's boundaries and whether each split is scene-aligned (green marker) or force-split (orange marker).</li>
+  </ul>
+
+  <h2>Interaction with Scene Detection</h2>
+  <p>
+    Adaptive chunking works best when a <code>SceneDetect</code> node precedes <code>ChunkedEncode</code> in the flow. The scene boundary list is stored as the flow variable <code>scene_boundaries</code> and consumed automatically by the chunking algorithm.
+  </p>
+  <p>
+    If no scene detection data is present (either because no <code>SceneDetect</code> node ran, or because detection found fewer than 2 boundaries), the chunking algorithm falls back to the raw calculated boundaries without scene alignment. The job still proceeds; the <code>scene_alignment_window_seconds</code> parameter has no effect in this fallback mode.
+  </p>
+  <p>
+    Scene detection is always worth running for content longer than 10 minutes. For shorter clips, the overhead of the detection pass (~5–15% of source duration) may outweigh the quality benefit of boundary alignment.
+  </p>
+
+  <h2>Limitations</h2>
+  <ul>
+    <li>Adaptive chunking requires the source to be a seekable container. Streaming inputs (e.g., raw MPEG-TS from a pipe) must be demuxed to a local file before chunking.</li>
+    <li>Two-pass encodes with <code>TwoPass</code> node cannot use adaptive chunking at present. The per-chunk log files from pass 1 must be available to the same agent for pass 2, which conflicts with the multi-agent distribution model. Use fixed chunking or single-pass CRF with <code>ChunkedEncode</code> for distributed encodes.</li>
+    <li>The rebalancing step can slightly increase the duration of the penultimate chunk. This is by design and does not affect output quality.</li>
+    <li>VFR sources may produce slightly uneven frame counts per chunk due to PTS rounding. The join step compensates for this automatically.</li>
+  </ul>
+</DocsLayout>

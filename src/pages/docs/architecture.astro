@@ -1,0 +1,89 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Architecture">
+  <h1>Architecture</h1>
+  <p>
+    EncodeSwarmr is a distributed video encoding orchestration system built around a Controller-Agent model. The Controller is a single Go binary that owns all state; Agents are lightweight worker processes that run on encoding machines and communicate with the Controller over mTLS gRPC.
+  </p>
+
+  <h2>System Overview</h2>
+  <pre><code>
+┌─────────────────────────────────────────────────────────┐
+│                       Browser / API Client              │
+│   React SPA (Vite)          REST /api/v1     WebSocket  │
+└───────────────┬─────────────────┬──────────────┬────────┘
+                │  HTTP :8080     │              │
+┌───────────────▼─────────────────▼──────────────▼────────┐
+│                     Controller (Go)                      │
+│                                                          │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  │  Job Queue  │  │  Scheduler   │  │  Template Eng. │  │
+│  │  (priority  │  │  (FIFO+      │  │  (AviSynth/    │  │
+│  │   FIFO)     │  │   priority)  │  │   VapourSynth) │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  │
+│                                                          │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  │  PostgreSQL │  │  WebSocket   │  │  Prometheus    │  │
+│  │  (state)    │  │  Event Hub   │  │  /metrics      │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  │
+└──────────────────────────┬──────────────────────────────┘
+                           │  gRPC :9443 (mTLS)
+          ┌────────────────┼────────────────┐
+          │                │                │
+┌─────────▼──────┐ ┌───────▼──────┐ ┌──────▼───────┐
+│   Agent 01     │ │   Agent 02   │ │   Agent 03   │
+│  (NVIDIA GPU)  │ │  (Intel QSV) │ │  (CPU only)  │
+│                │ │              │ │              │
+│  SQLite journal│ │ SQLite journl│ │ SQLite journl│
+└────────────────┘ └──────────────┘ └──────────────┘
+  </code></pre>
+
+  <h2>Key Features</h2>
+  <ul>
+    <li><strong>Controller-Agent separation</strong> — state lives exclusively in the Controller; agents are stateless workers that pull work via gRPC streaming RPCs.</li>
+    <li><strong>mTLS authentication</strong> — all gRPC traffic is encrypted and mutually authenticated using per-agent certificates issued by the Controller's built-in CA.</li>
+    <li><strong>Priority FIFO scheduling</strong> — jobs carry an integer priority; within the same priority the queue is first-in, first-out. The scheduler matches jobs to capable agents based on codec requirements and GPU availability.</li>
+    <li><strong>Adaptive chunked encoding</strong> — the Controller splits long sources into segments and distributes chunks across multiple agents in parallel, then concatenates the output.</li>
+    <li><strong>Offline resilience</strong> — agents maintain a local SQLite journal; they can survive a Controller outage and resume reporting when connectivity is restored.</li>
+    <li><strong>Template-driven script generation</strong> — AviSynth and VapourSynth filter scripts are generated from Jinja-style templates, allowing custom filter chains per preset.</li>
+    <li><strong>Real-time WebSocket events</strong> — all job state transitions, agent heartbeats, and log lines are broadcast over WebSocket so the React dashboard updates without polling.</li>
+    <li><strong>Plugin-based codec system</strong> — encoding backends are Go interface implementations registered at startup, making it straightforward to add new codecs.</li>
+    <li><strong>Prometheus metrics</strong> — the Controller and each Agent expose <code>/metrics</code> endpoints compatible with Prometheus scraping and the included Grafana dashboards.</li>
+  </ul>
+
+  <h2>Architecture Decision Records</h2>
+  <p>Significant architectural choices are documented as Architecture Decision Records (ADRs). See the <a href="/docs/adr">ADR Index</a> for the full list of decisions and their current status.</p>
+
+  <h2>Repository Layout</h2>
+  <pre><code>encodeswarmr/
+├── cmd/
+│   ├── controller/        # Controller binary entrypoint
+│   └── agent/             # Agent binary entrypoint
+├── internal/
+│   ├── api/               # REST API handlers (Gin)
+│   ├── agent/             # Agent gRPC client and job runner
+│   ├── controller/        # Controller gRPC server
+│   ├── db/                # PostgreSQL migrations and queries (sqlc)
+│   ├── job/               # Job queue, scheduler, and state machine
+│   ├── plugin/            # Codec plugin registry and built-in plugins
+│   ├── template/          # AviSynth / VapourSynth script templating
+│   ├── tracing/           # OpenTelemetry setup helpers
+│   └── webhook/           # Outbound webhook dispatcher
+├── proto/                 # gRPC / protobuf definitions
+├── web/                   # React SPA source (Vite + TypeScript)
+│   ├── src/
+│   │   ├── components/    # Shared UI components
+│   │   ├── context/       # React contexts (Branding, Auth, WS)
+│   │   ├── pages/         # Route-level page components
+│   │   └── api/           # API client helpers
+│   └── dist/              # Built frontend (embedded in binary)
+├── grafana/               # Pre-built Grafana dashboard JSON files
+├── deploy/
+│   ├── ansible/           # Ansible roles and playbooks
+│   ├── terraform/         # Terraform modules (AWS, Azure, GCP)
+│   ├── kubernetes/        # Helm chart
+│   └── docker-compose.yml # Quick-start compose file
+├── docs/                  # Additional documentation
+└── Makefile</code></pre>
+</DocsLayout>

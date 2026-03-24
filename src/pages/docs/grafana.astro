@@ -1,0 +1,154 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Grafana Dashboards">
+  <h1>Grafana Dashboards</h1>
+  <p>
+    EncodeSwarmr ships pre-built Grafana dashboards for monitoring job throughput, agent health, queue depth, and encoding performance. The dashboard files live in the <code>grafana/</code> directory of the repository.
+  </p>
+
+  <h2>Dashboard Files</h2>
+  <table>
+    <thead>
+      <tr><th>File</th><th>Dashboard Name</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>grafana/encodeswarmr-overview.json</code></td><td>EncodeSwarmr — Overview</td><td>High-level job and agent summary</td></tr>
+      <tr><td><code>grafana/encodeswarmr-agents.json</code></td><td>EncodeSwarmr — Agents</td><td>Per-agent resource and status panels</td></tr>
+      <tr><td><code>grafana/encodeswarmr-jobs.json</code></td><td>EncodeSwarmr — Jobs</td><td>Job lifecycle, duration, and error rates</td></tr>
+      <tr><td><code>grafana/encodeswarmr-queue.json</code></td><td>EncodeSwarmr — Queue</td><td>Queue depth, wait time, and scheduling lag</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Dashboard Panels</h2>
+  <table>
+    <thead>
+      <tr><th>Panel</th><th>Type</th><th>PromQL Query</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Jobs Completed (rate)</td>
+        <td>Time series</td>
+        <td><code>rate(encodeswarmr_jobs_completed_total[5m])</code></td>
+      </tr>
+      <tr>
+        <td>Jobs Failed (rate)</td>
+        <td>Time series</td>
+        <td><code>rate(encodeswarmr_jobs_failed_total[5m])</code></td>
+      </tr>
+      <tr>
+        <td>Active Agents</td>
+        <td>Stat</td>
+        <td><code>encodeswarmr_agents_active</code></td>
+      </tr>
+      <tr>
+        <td>Queue Depth</td>
+        <td>Stat</td>
+        <td><code>encodeswarmr_queue_depth</code></td>
+      </tr>
+      <tr>
+        <td>Encoding Duration (p50/p95/p99)</td>
+        <td>Time series</td>
+        <td><code>histogram_quantile(0.95, rate(encodeswarmr_job_duration_seconds_bucket[5m]))</code></td>
+      </tr>
+      <tr>
+        <td>Agent CPU Usage</td>
+        <td>Time series</td>
+        <td><code>encodeswarmr_agent_cpu_percent&#123;agent="$agent"&#125;</code></td>
+      </tr>
+      <tr>
+        <td>Agent GPU Usage</td>
+        <td>Time series</td>
+        <td><code>encodeswarmr_agent_gpu_percent&#123;agent="$agent"&#125;</code></td>
+      </tr>
+      <tr>
+        <td>Bytes Encoded (cumulative)</td>
+        <td>Time series</td>
+        <td><code>increase(encodeswarmr_bytes_encoded_total[1h])</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Dashboard Variables</h2>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Type</th><th>Query / Value</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>$datasource</code></td><td>Datasource</td><td>Prometheus</td><td>Prometheus data source selector</td></tr>
+      <tr><td><code>$agent</code></td><td>Query</td><td><code>label_values(encodeswarmr_agent_cpu_percent, agent)</code></td><td>Filter panels by agent name</td></tr>
+      <tr><td><code>$job_type</code></td><td>Query</td><td><code>label_values(encodeswarmr_jobs_completed_total, job_type)</code></td><td>Filter by encode / analysis / vmaf</td></tr>
+      <tr><td><code>$interval</code></td><td>Interval</td><td>1m, 5m, 15m, 1h</td><td>Scrape interval for rate() window</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Import Instructions</h2>
+
+  <h3>Grafana UI</h3>
+  <ol>
+    <li>Open Grafana and navigate to <strong>Dashboards → Import</strong>.</li>
+    <li>Click <strong>Upload JSON file</strong> and select the desired <code>.json</code> file from the <code>grafana/</code> directory.</li>
+    <li>Select your Prometheus data source from the <strong>Datasource</strong> dropdown.</li>
+    <li>Click <strong>Import</strong> to finish.</li>
+  </ol>
+
+  <h3>Grafana Provisioning</h3>
+  <p>Place the dashboard JSON files in your Grafana provisioning directory and add a provider configuration:</p>
+  <pre><code># /etc/grafana/provisioning/dashboards/encodeswarmr.yaml
+apiVersion: 1
+providers:
+  - name: EncodeSwarmr
+    orgId: 1
+    folder: EncodeSwarmr
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/encodeswarmr</code></pre>
+
+  <h3>Grafana API</h3>
+  <p>Import a dashboard via the Grafana HTTP API:</p>
+  <pre><code>curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $GRAFANA_API_KEY" \
+  -d @grafana/encodeswarmr-overview.json \
+  http://localhost:3000/api/dashboards/import</code></pre>
+
+  <h2>Prometheus Scrape Configuration</h2>
+  <p>Add EncodeSwarmr to your <code>prometheus.yml</code>:</p>
+  <pre><code>scrape_configs:
+  - job_name: encodeswarmr_controller
+    static_configs:
+      - targets:
+          - controller:8080
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: encodeswarmr_agents
+    static_configs:
+      - targets:
+          - agent-01:9100
+          - agent-02:9100
+          - agent-03:9100
+    metrics_path: /metrics
+    scrape_interval: 15s</code></pre>
+
+  <h2>Exposed Metrics</h2>
+  <table>
+    <thead>
+      <tr><th>Metric</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>encodeswarmr_jobs_completed_total</code></td><td>Counter</td><td>Total number of successfully completed encoding jobs</td></tr>
+      <tr><td><code>encodeswarmr_jobs_failed_total</code></td><td>Counter</td><td>Total number of failed encoding jobs</td></tr>
+      <tr><td><code>encodeswarmr_jobs_queued_total</code></td><td>Counter</td><td>Total number of jobs added to the queue</td></tr>
+      <tr><td><code>encodeswarmr_queue_depth</code></td><td>Gauge</td><td>Current number of jobs waiting in the queue</td></tr>
+      <tr><td><code>encodeswarmr_agents_active</code></td><td>Gauge</td><td>Number of agents currently connected and healthy</td></tr>
+      <tr><td><code>encodeswarmr_job_duration_seconds</code></td><td>Histogram</td><td>Wall-clock duration of completed encoding jobs in seconds</td></tr>
+      <tr><td><code>encodeswarmr_agent_cpu_percent</code></td><td>Gauge</td><td>Agent host CPU utilisation (0–100) labelled by <code>agent</code></td></tr>
+      <tr><td><code>encodeswarmr_agent_gpu_percent</code></td><td>Gauge</td><td>Agent GPU encoder utilisation (0–100) labelled by <code>agent</code></td></tr>
+      <tr><td><code>encodeswarmr_bytes_encoded_total</code></td><td>Counter</td><td>Cumulative output bytes produced by completed jobs</td></tr>
+      <tr><td><code>encodeswarmr_agent_queue_wait_seconds</code></td><td>Histogram</td><td>Time a job spends waiting in queue before assignment</td></tr>
+    </tbody>
+  </table>
+</DocsLayout>

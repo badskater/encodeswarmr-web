@@ -1,0 +1,129 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Theme & Branding">
+  <h1>Theme &amp; Branding</h1>
+  <p>
+    EncodeSwarmr ships with a built-in theming system that lets operators customise the look and feel of the web dashboard without modifying source code. Themes are applied at runtime using CSS custom properties and a React branding context.
+  </p>
+
+  <h2>Theme Selection</h2>
+
+  <h3>Available Themes</h3>
+  <table>
+    <thead>
+      <tr><th>Theme ID</th><th>Display Name</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>dark</code></td><td>Dark (Default)</td><td>Deep charcoal background with blue-violet accent colours</td></tr>
+      <tr><td><code>light</code></td><td>Light</td><td>White background with muted grey panels and blue accents</td></tr>
+      <tr><td><code>high-contrast</code></td><td>High Contrast</td><td>Pure black background, pure white text, high-visibility accent</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Switching from the NavBar</h3>
+  <p>Click the palette icon in the top-right navigation bar to open the theme picker popover. Select a theme name to apply it immediately. The selection is persisted to <code>localStorage</code> and restored on next page load.</p>
+
+  <h3>Switching from Settings</h3>
+  <p>Navigate to <strong>Settings → Appearance → Theme</strong>. The same three options are available. Saving from the settings page also writes the preference to the server-side user profile so that it roams across browsers.</p>
+
+  <h2>Custom Branding</h2>
+
+  <h3>Branding Fields</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>applicationName</code></td><td>string</td><td>Replaces "EncodeSwarmr" in the NavBar title and browser tab</td></tr>
+      <tr><td><code>logoUrl</code></td><td>string (URL)</td><td>URL to a custom SVG or PNG logo displayed in the NavBar</td></tr>
+      <tr><td><code>faviconUrl</code></td><td>string (URL)</td><td>URL to a custom favicon (16×16 or 32×32 PNG/ICO)</td></tr>
+      <tr><td><code>primaryColor</code></td><td>hex string</td><td>Override the primary accent colour (e.g. <code>#e11d48</code>)</td></tr>
+      <tr><td><code>supportUrl</code></td><td>string (URL)</td><td>URL shown in the Help menu and error pages</td></tr>
+      <tr><td><code>footerText</code></td><td>string</td><td>Custom text rendered in the dashboard footer</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Setting Custom Branding</h3>
+  <ol>
+    <li>Navigate to <strong>Settings → Appearance → Branding</strong>.</li>
+    <li>Fill in the desired branding fields.</li>
+    <li>Upload a logo file using the file picker, or paste a remote URL into the <strong>Logo URL</strong> field.</li>
+    <li>Click <strong>Save Branding</strong>. Changes take effect immediately for all logged-in users.</li>
+    <li>To reset to defaults, click <strong>Reset to Defaults</strong> at the bottom of the branding panel.</li>
+  </ol>
+
+  <h3>Branding Storage</h3>
+  <p>Branding configuration is stored in the Controller database and served to the frontend at startup via <code>GET /api/v1/branding</code>. The JSON schema is:</p>
+  <pre><code>&#123;
+  "applicationName": "EncodeSwarmr",
+  "logoUrl": "",
+  "faviconUrl": "",
+  "primaryColor": "",
+  "supportUrl": "",
+  "footerText": ""
+&#125;</code></pre>
+
+  <h2>CSS Variable Override System</h2>
+
+  <h3>Available Variables</h3>
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default (dark theme)</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>--color-surface-950</code></td><td><code>#0a0a0f</code></td><td>Page background</td></tr>
+      <tr><td><code>--color-surface-900</code></td><td><code>#111118</code></td><td>Card / panel background</td></tr>
+      <tr><td><code>--color-surface-800</code></td><td><code>#1c1c27</code></td><td>Input and code block background</td></tr>
+      <tr><td><code>--color-surface-700</code></td><td><code>#2a2a3a</code></td><td>Border colour</td></tr>
+      <tr><td><code>--color-surface-600</code></td><td><code>#3a3a50</code></td><td>Hover state background</td></tr>
+      <tr><td><code>--color-surface-400</code></td><td><code>#7070a0</code></td><td>Muted text</td></tr>
+      <tr><td><code>--color-surface-200</code></td><td><code>#c8c8e0</code></td><td>Secondary text</td></tr>
+      <tr><td><code>--color-surface-100</code></td><td><code>#e0e0f0</code></td><td>Primary text</td></tr>
+      <tr><td><code>--color-primary-600</code></td><td><code>#2563eb</code></td><td>Primary action buttons</td></tr>
+      <tr><td><code>--color-primary-500</code></td><td><code>#3b82f6</code></td><td>Primary accent</td></tr>
+      <tr><td><code>--color-primary-400</code></td><td><code>#60a5fa</code></td><td>Links and active states</td></tr>
+      <tr><td><code>--color-primary-300</code></td><td><code>#93c5fd</code></td><td>Link hover colour</td></tr>
+      <tr><td><code>--color-success-500</code></td><td><code>#22c55e</code></td><td>Success badges and alerts</td></tr>
+      <tr><td><code>--color-warning-500</code></td><td><code>#f59e0b</code></td><td>Warning badges and alerts</td></tr>
+      <tr><td><code>--color-error-500</code></td><td><code>#ef4444</code></td><td>Error badges and alerts</td></tr>
+      <tr><td><code>--color-info-500</code></td><td><code>#06b6d4</code></td><td>Informational badges</td></tr>
+      <tr><td><code>--font-sans</code></td><td><code>'Inter', sans-serif</code></td><td>Body and UI font stack</td></tr>
+      <tr><td><code>--font-mono</code></td><td><code>'JetBrains Mono', monospace</code></td><td>Code and terminal font stack</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Using the CSS Variable Editor</h3>
+  <ol>
+    <li>Navigate to <strong>Settings → Appearance → Advanced CSS</strong>.</li>
+    <li>Enter CSS variable overrides in the text area. Example: <code>:root &#123; --color-primary-500: #e11d48; &#125;</code></li>
+    <li>Click <strong>Preview</strong> to apply the overrides live in the current tab without saving.</li>
+    <li>Click <strong>Save</strong> to persist the overrides. They are injected into a <code>&lt;style&gt;</code> tag on every page load for all users.</li>
+    <li>Click <strong>Reset CSS</strong> to remove all custom overrides and revert to theme defaults.</li>
+  </ol>
+
+  <h3>Override Persistence</h3>
+  <p>Saved CSS overrides are stored in the Controller database and returned as a JSON object via <code>GET /api/v1/branding</code>:</p>
+  <pre><code>&#123;
+  "cssOverrides": ":root &#123; --color-primary-500: #e11d48; --color-primary-400: #fb7185; &#125;"
+&#125;</code></pre>
+
+  <h2>BrandingContext API</h2>
+  <p>React components can consume branding values via the <code>useBranding</code> hook exported from <code>src/context/BrandingContext.tsx</code>:</p>
+  <pre><code>import &#123; useBranding &#125; from '@/context/BrandingContext';
+
+function NavBar() &#123;
+  const &#123; applicationName, logoUrl, primaryColor &#125; = useBranding();
+
+  return (
+    &lt;nav&gt;
+      &#123;logoUrl ? (
+        &lt;img src=&#123;logoUrl&#125; alt=&#123;applicationName&#125; className="h-8" /&gt;
+      ) : (
+        &lt;span className="font-bold text-white"&gt;&#123;applicationName&#125;&lt;/span&gt;
+      )&#125;
+    &lt;/nav&gt;
+  );
+&#125;</code></pre>
+  <p>The hook returns the full branding object fetched from <code>/api/v1/branding</code> and cached in React context. It re-fetches on settings save events via the WebSocket event bus.</p>
+</DocsLayout>

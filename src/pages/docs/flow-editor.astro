@@ -1,0 +1,195 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Flow Pipeline Editor">
+  <h1>Flow Pipeline Editor</h1>
+  <p>
+    The Flow Pipeline Editor is a visual, drag-and-drop interface for building encoding workflows. Inspired by tools like FileFlows and Node-RED, it lets you construct complex multi-step pipelines by connecting nodes on a canvas — no scripting required.
+  </p>
+  <p>
+    Each flow defines a complete encoding pipeline: from input selection through analysis, conditional branching, encoding, audio processing, output delivery, and notifications. Flows are reusable and versioned; any flow can be attached to a job at creation time or referenced from a template.
+  </p>
+
+  <h2>Accessing the Editor</h2>
+  <p>The Flow Pipeline Editor is available from the main navigation under <strong>Flows</strong>.</p>
+  <ul>
+    <li><strong>Flow List</strong> — Navigate to <code>/flows</code> to see all saved flows. Each row shows the flow name, node count, last modified date, and a status badge (active / draft).</li>
+    <li><strong>New Flow</strong> — Click <strong>+ New Flow</strong> to open a blank canvas. You will be prompted to name the flow before the editor opens.</li>
+    <li><strong>Edit Flow</strong> — Click any flow name or its pencil icon to open the canvas with that flow loaded. Changes are auto-saved as drafts; click <strong>Publish</strong> to make the flow available for job creation.</li>
+  </ul>
+
+  <h2>Editor Layout</h2>
+  <table>
+    <thead>
+      <tr><th>Panel</th><th>Location</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Node Sidebar</strong></td>
+        <td>Left</td>
+        <td>Browse all available node types organised by category. Drag a node onto the canvas to add it to the flow. Use the search box at the top to filter by name.</td>
+      </tr>
+      <tr>
+        <td><strong>Canvas</strong></td>
+        <td>Centre</td>
+        <td>The main editing surface. Nodes appear as cards; draw connections by dragging from an output port to an input port. Scroll to zoom; click-drag on empty space to pan.</td>
+      </tr>
+      <tr>
+        <td><strong>Config Panel</strong></td>
+        <td>Right</td>
+        <td>Displays the configuration form for the currently selected node. Changes apply immediately in draft mode. The panel collapses when no node is selected.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Node Types</h2>
+  <p>
+    The editor ships with 35 built-in node types across 9 categories. Third-party nodes can be added via the Plugin System.
+  </p>
+
+  <h3>Input (2 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>FileInput</code></td><td>Reads a local file path or UNC share. Supports glob patterns for batch operations.</td></tr>
+      <tr><td><code>CloudInput</code></td><td>Pulls a file from an S3, GCS, or Azure Blob URI. Credentials are resolved from the environment or a registered cloud source.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Encoding (5 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Encode</code></td><td>Core encoding node. Select a preset or configure codec, bitrate, resolution, and FFmpeg flags directly.</td></tr>
+      <tr><td><code>ChunkedEncode</code></td><td>Splits the source into chunks and encodes in parallel across available agents. Supports adaptive or fixed chunking.</td></tr>
+      <tr><td><code>Transcode</code></td><td>Stream-copy passthrough with optional transcoding for selected streams only.</td></tr>
+      <tr><td><code>TwoPass</code></td><td>Runs a two-pass encode for better bitrate accuracy. Automatically handles pass-1 log file routing between agents.</td></tr>
+      <tr><td><code>RemuxOnly</code></td><td>Container remux without re-encoding. Fast; no quality loss.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Analysis (4 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>MediaInfo</code></td><td>Runs MediaInfo against the source and exposes stream metadata as flow variables (resolution, codec, bitrate, HDR type, etc.).</td></tr>
+      <tr><td><code>HDRAnalyse</code></td><td>Detects HDR format (HDR10, HDR10+, Dolby Vision, HLG) and extracts mastering display metadata and MaxCLL/MaxFALL values.</td></tr>
+      <tr><td><code>SceneDetect</code></td><td>Runs PySceneDetect to find scene boundaries. Outputs a boundary list used by ChunkedEncode for chunk-aligned splitting.</td></tr>
+      <tr><td><code>LoudnessAnalyse</code></td><td>Measures integrated loudness (LUFS), true peak, and LRA using the EBU R128 algorithm. Results are stored as variables for downstream audio nodes.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Conditions (5 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>If</code></td><td>Evaluates a boolean expression against flow variables. Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
+      <tr><td><code>Switch</code></td><td>Multi-branch switch on a string or numeric variable. Add as many cases as needed; unmatched values route to the <em>default</em> port.</td></tr>
+      <tr><td><code>Compare</code></td><td>Compares two values (variables, literals, or node outputs) with operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>, <code>contains</code>, <code>matches</code>.</td></tr>
+      <tr><td><code>HasStream</code></td><td>Checks whether the source contains a stream matching a filter (type, codec, language). Useful for branching on the presence of subtitles or a specific audio track.</td></tr>
+      <tr><td><code>IsHDR</code></td><td>Convenience condition that evaluates to true when the source contains any HDR signal. Equivalent to an <code>If</code> node checking the <code>hdr_type</code> variable.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Audio (4 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>AudioNormalise</code></td><td>Applies EBU R128 loudness normalisation using values from a preceding LoudnessAnalyse node, or measures inline.</td></tr>
+      <tr><td><code>AudioMix</code></td><td>Downmixes or upmixes audio channels. Common use: 5.1 → stereo compatibility track.</td></tr>
+      <tr><td><code>AudioExtract</code></td><td>Extracts one or more audio streams to separate files for independent processing.</td></tr>
+      <tr><td><code>AudioMerge</code></td><td>Merges multiple audio files or streams back into the container alongside video.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Output (4 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>FileOutput</code></td><td>Writes the encoded file to a local path or UNC share. Supports token substitution in the path (e.g., <code>&#123;'&#123;'&#125;source_name&#123;'&#125;'&#125;.mkv</code>).</td></tr>
+      <tr><td><code>CloudUpload</code></td><td>Uploads the output to an S3, GCS, or Azure Blob destination URI.</td></tr>
+      <tr><td><code>MoveFile</code></td><td>Moves or renames the output file after encoding. Can be chained after FileOutput to implement atomic delivery.</td></tr>
+      <tr><td><code>DeleteSource</code></td><td>Deletes the original source file after a successful encode. Requires explicit confirmation in node config.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Notifications (4 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>EmailNotify</code></td><td>Sends an email with a configurable subject and body template. Uses the SMTP settings from the global configuration.</td></tr>
+      <tr><td><code>WebhookNotify</code></td><td>Posts a JSON payload to a configured webhook URL. Payload template supports all flow variables.</td></tr>
+      <tr><td><code>SlackNotify</code></td><td>Posts a message to a Slack channel via an incoming webhook URL.</td></tr>
+      <tr><td><code>PushoverNotify</code></td><td>Sends a push notification via the Pushover API.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Templates (2 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>SubFlow</code></td><td>Embeds another saved flow as a reusable sub-routine. Input and output variables pass through. Useful for shared normalisation or notification logic.</td></tr>
+      <tr><td><code>SetVariable</code></td><td>Creates or overwrites a flow variable with a literal value or expression. Use to set defaults or transform values for downstream nodes.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Flow Control (4 nodes)</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Wait</code></td><td>Pauses flow execution until a condition becomes true or a timeout elapses. Useful for waiting on an external dependency job.</td></tr>
+      <tr><td><code>Retry</code></td><td>Wraps a section of the flow in retry logic with configurable attempts and backoff strategy.</td></tr>
+      <tr><td><code>Parallel</code></td><td>Fans out to multiple branches that execute concurrently. A join port waits for all branches to complete before continuing.</td></tr>
+      <tr><td><code>End</code></td><td>Explicitly terminates the flow with a success or failure status. Any path that reaches a dead end without an End node is treated as an implicit success.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Canvas Features</h2>
+  <ul>
+    <li><strong>Snap to grid</strong> — Nodes align to a 20 px grid for tidy layouts. Hold <kbd>Alt</kbd> while dragging to disable snapping.</li>
+    <li><strong>MiniMap</strong> — A thumbnail overview of the entire canvas appears in the bottom-right corner. Click anywhere in the minimap to pan to that region.</li>
+    <li><strong>Keyboard shortcuts</strong> — <kbd>Ctrl+Z</kbd> / <kbd>Cmd+Z</kbd> to undo, <kbd>Ctrl+Y</kbd> / <kbd>Cmd+Y</kbd> to redo, <kbd>Delete</kbd> or <kbd>Backspace</kbd> to remove selected nodes or edges, <kbd>Ctrl+A</kbd> to select all, <kbd>Space</kbd>+drag to pan.</li>
+    <li><strong>Connection validation</strong> — The editor enforces port compatibility. Dragging an incompatible connection highlights the target port in red and shows a tooltip explaining the type mismatch.</li>
+    <li><strong>Colored nodes</strong> — Each category has a distinct accent colour for at-a-glance identification: Input (blue), Encoding (violet), Analysis (amber), Conditions (teal), Audio (green), Output (indigo), Notifications (rose), Templates (slate), Flow Control (orange).</li>
+  </ul>
+
+  <h2>Using Flows in Job Creation</h2>
+  <ol>
+    <li>Navigate to <strong>Jobs &gt; New Job</strong>.</li>
+    <li>In the <strong>Pipeline</strong> field, select <strong>Flow</strong> from the type dropdown, then choose the desired flow from the list. Published flows appear immediately; draft flows can be selected by enabling the <em>Include drafts</em> toggle.</li>
+    <li>Complete the remaining job fields (source, agent tags, priority) and click <strong>Submit</strong>. The flow will execute node-by-node as the job runs, and per-node logs are visible in the job detail view.</li>
+  </ol>
+
+  <h2>API Reference</h2>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/flows</code></td><td>List all flows (paginated). Accepts <code>?status=published|draft</code> filter.</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/flows</code></td><td>Create a new flow. Body: <code>&#123;"name":"string","nodes":[...],"edges":[...]&#125;</code></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/flows/&#123;id&#125;</code></td><td>Get a single flow definition including all nodes and edges.</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/v1/flows/&#123;id&#125;</code></td><td>Replace an existing flow definition. Increments the internal version counter.</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/v1/flows/&#123;id&#125;</code></td><td>Delete a flow. Returns <code>409 Conflict</code> if the flow is referenced by any active job or template.</td></tr>
+    </tbody>
+  </table>
+</DocsLayout>

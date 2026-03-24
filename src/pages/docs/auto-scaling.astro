@@ -1,0 +1,184 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Auto-Scaling">
+  <h1>Auto-Scaling</h1>
+  <p>
+    EncodeSwarmr's auto-scaling feature fires outbound webhook calls to your infrastructure when the job queue grows or shrinks, enabling you to dynamically provision and deprovision encoding agents. The Controller does not manage infrastructure directly — it delegates that responsibility to your existing tooling (Kubernetes, AWS ASG, custom scripts, etc.) via a simple HTTP webhook contract.
+  </p>
+
+  <h2>How Auto-Scaling Hooks Work</h2>
+  <ol>
+    <li>The Controller continuously monitors queue depth and the number of connected agents.</li>
+    <li>When queue depth divided by agents exceeds the <code>scale_up_threshold</code>, the Controller fires a <code>scale_up</code> webhook to your endpoint requesting <code>desired_agents</code> additional agents.</li>
+    <li>When queue depth divided by agents falls below the <code>scale_down_threshold</code> and a cooldown period has elapsed, the Controller fires a <code>scale_down</code> webhook.</li>
+    <li>Your endpoint provisions or deprovisions agents and returns HTTP 200. The Controller applies a cooldown window before firing the next scale event to prevent flapping.</li>
+  </ol>
+
+  <h2>Configuration</h2>
+  <p>Add the <code>auto_scaling</code> block to <code>controller.yaml</code>:</p>
+  <pre><code>auto_scaling:
+  enabled: true
+  webhook_url: https://infra.example.com/hooks/encodeswarmr-scale
+  secret: my-scaling-secret          # HMAC-SHA256 secret (same header as webhooks)
+  scale_up_threshold: 5              # jobs per agent ratio to trigger scale-up
+  scale_down_threshold: 1            # jobs per agent ratio to trigger scale-down
+  min_agents: 1                      # never scale below this count
+  max_agents: 20                     # never request above this count
+  cooldown_seconds: 120              # minimum seconds between consecutive scale events</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Master switch for auto-scaling</td></tr>
+      <tr><td><code>webhook_url</code></td><td>string</td><td>—</td><td>HTTP(S) endpoint that receives scale events</td></tr>
+      <tr><td><code>secret</code></td><td>string</td><td>—</td><td>HMAC-SHA256 signing secret; sent in <code>X-EncodeSwarmr-Signature</code></td></tr>
+      <tr><td><code>scale_up_threshold</code></td><td>int</td><td><code>5</code></td><td>Queue depth per agent ratio above which to scale up</td></tr>
+      <tr><td><code>scale_down_threshold</code></td><td>int</td><td><code>1</code></td><td>Queue depth per agent ratio below which to scale down</td></tr>
+      <tr><td><code>min_agents</code></td><td>int</td><td><code>1</code></td><td>Lower bound; Controller never requests fewer than this</td></tr>
+      <tr><td><code>max_agents</code></td><td>int</td><td><code>20</code></td><td>Upper bound; Controller never requests more than this</td></tr>
+      <tr><td><code>cooldown_seconds</code></td><td>int</td><td><code>120</code></td><td>Minimum seconds between consecutive scale events</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Webhook Payload Format</h2>
+  <p>All scale events are delivered as <code>POST</code> requests with a JSON body and the <code>X-EncodeSwarmr-Signature</code> HMAC header.</p>
+
+  <h3>scale_up payload</h3>
+  <pre><code>&#123;
+  "event": "scale_up",
+  "current_agents": 2,
+  "desired_agents": 5,
+  "queue_depth": 18,
+  "timestamp": "2025-06-01T14:32:00Z"
+&#125;</code></pre>
+
+  <h3>scale_down payload</h3>
+  <pre><code>&#123;
+  "event": "scale_down",
+  "current_agents": 8,
+  "desired_agents": 3,
+  "queue_depth": 1,
+  "timestamp": "2025-06-01T16:10:00Z"
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>event</code></td><td>string</td><td><code>scale_up</code> or <code>scale_down</code></td></tr>
+      <tr><td><code>current_agents</code></td><td>int</td><td>Number of agents currently connected to the Controller</td></tr>
+      <tr><td><code>desired_agents</code></td><td>int</td><td>Total agent count the Controller wants after the scaling action</td></tr>
+      <tr><td><code>queue_depth</code></td><td>int</td><td>Number of jobs currently waiting in the queue</td></tr>
+      <tr><td><code>timestamp</code></td><td>string</td><td>ISO 8601 UTC timestamp of the event</td></tr>
+    </tbody>
+  </table>
+
+  <p>Your endpoint must respond with HTTP 200 within 10 seconds. Any other status code or a timeout causes the Controller to log a warning and try again after the next evaluation cycle.</p>
+
+  <h2>UI Admin Page Walkthrough</h2>
+  <p>Auto-scaling settings are managed in the admin UI under <strong>Settings → Auto-Scaling</strong>:</p>
+  <ol>
+    <li>Toggle <strong>Enable auto-scaling</strong> to activate the feature.</li>
+    <li>Enter the <strong>Webhook URL</strong> of your scaling endpoint.</li>
+    <li>Set the <strong>HMAC Secret</strong> (stored encrypted at rest).</li>
+    <li>Adjust the <strong>Scale-Up Threshold</strong> and <strong>Scale-Down Threshold</strong> sliders.</li>
+    <li>Set <strong>Min Agents</strong> and <strong>Max Agents</strong> bounds.</li>
+    <li>Configure the <strong>Cooldown</strong> in seconds.</li>
+    <li>Click <strong>Save</strong>. A test payload is fired to verify connectivity.</li>
+    <li>The <strong>Scaling Events</strong> tab shows a live log of all scale_up and scale_down deliveries with response codes and timestamps.</li>
+  </ol>
+
+  <h2>Integration Examples</h2>
+
+  <h3>Kubernetes HPA (Python webhook receiver)</h3>
+  <pre><code>from flask import Flask, request, abort
+from kubernetes import client, config
+import json
+
+app = Flask(__name__)
+config.load_incluster_config()
+apps_v1 = client.AppsV1Api()
+
+DEPLOYMENT = "encodeswarmr-agent"
+NAMESPACE   = "encoding"
+
+@app.route("/hooks/encodeswarmr-scale", methods=["POST"])
+def handle_scale():
+    payload = request.get_json()
+    desired = payload["desired_agents"]
+    apps_v1.patch_namespaced_deployment_scale(
+        name=DEPLOYMENT,
+        namespace=NAMESPACE,
+        body=&#123;"spec": &#123;"replicas": desired&#125;&#125;
+    )
+    return "", 200</code></pre>
+
+  <h3>AWS ASG (bash webhook receiver via AWS CLI)</h3>
+  <pre><code>#!/usr/bin/env bash
+# Simple example using jq + AWS CLI inside a Lambda or EC2-hosted receiver
+
+PAYLOAD=$(cat)
+DESIRED=$(echo "$PAYLOAD" | jq -r '.desired_agents')
+ASG_NAME="encodeswarmr-agents"
+
+aws autoscaling set-desired-capacity \
+  --auto-scaling-group-name "$ASG_NAME" \
+  --desired-capacity "$DESIRED" \
+  --no-honor-cooldown
+
+echo '&#123;"status":"ok"&#125;'</code></pre>
+
+  <h3>Custom script (bash)</h3>
+  <pre><code>#!/usr/bin/env bash
+# Minimal receiver that logs the event and delegates to a Nomad job
+
+PAYLOAD=$(cat)
+EVENT=$(echo "$PAYLOAD" | jq -r '.event')
+DESIRED=$(echo "$PAYLOAD" | jq -r '.desired_agents')
+
+echo "$(date -u +%FT%TZ) scale event=$EVENT desired=$DESIRED" \
+  &gt;&gt; /var/log/encodeswarmr-scaling.log
+
+nomad job scale encodeswarmr-agent "$DESIRED"</code></pre>
+
+  <h2>Cooldown Behaviour</h2>
+  <p>
+    After any scale event is fired, the Controller enters a cooldown period of <code>cooldown_seconds</code>. During this window:
+  </p>
+  <ul>
+    <li>No further scale_up or scale_down events are emitted, regardless of queue depth changes.</li>
+    <li>The current cooldown timer is shown in the <strong>Settings → Auto-Scaling</strong> UI as a countdown.</li>
+    <li>The cooldown is intentionally shared between scale_up and scale_down to prevent oscillation.</li>
+  </ul>
+  <p>
+    Set <code>cooldown_seconds</code> to at least as long as it takes your infrastructure to provision a new agent and have it connect to the Controller; otherwise the Controller may fire multiple scale-up events before agents arrive.
+  </p>
+
+  <h2>Signature Verification</h2>
+  <p>Auto-scaling webhooks use the same HMAC-SHA256 scheme as regular event webhooks. Verify the signature before trusting the payload:</p>
+  <pre><code>import hmac, hashlib
+from flask import request, abort
+
+SCALING_SECRET = "my-scaling-secret"
+
+def verify_scaling_request():
+    sig_header = request.headers.get("X-EncodeSwarmr-Signature", "")
+    body = request.get_data()
+    expected = "sha256=" + hmac.new(
+        SCALING_SECRET.encode(), body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, sig_header):
+        abort(403, "Invalid signature")</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/agents">Agent Management</a> — Agent registration, capabilities, and health</li>
+    <li><a href="/docs/webhooks">Webhooks</a> — General webhook configuration and event reference</li>
+    <li><a href="/docs/retry">Intelligent Retry</a> — How failed jobs are retried before scaling is considered</li>
+  </ul>
+</DocsLayout>

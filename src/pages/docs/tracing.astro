@@ -1,0 +1,86 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="OpenTelemetry Tracing">
+  <h1>OpenTelemetry Tracing</h1>
+  <p>
+    EncodeSwarmr emits distributed traces using the OpenTelemetry SDK. Traces cover HTTP request handling, gRPC calls between the Controller and Agents, job expansion, and individual task execution. Traces can be exported to any OTLP-compatible backend such as Jaeger, Tempo, or Honeycomb.
+  </p>
+
+  <h2>Configuration</h2>
+  <p>Tracing is configured in the Controller and Agent configuration files under the <code>tracing</code> key:</p>
+  <pre><code># config.yaml (Controller or Agent)
+tracing:
+  enabled: true
+  # OTLP gRPC endpoint for the trace collector
+  endpoint: "localhost:4317"
+  # Service name reported in spans
+  service_name: "encodeswarmr-controller"
+  # Sampling ratio: 1.0 = 100%, 0.1 = 10%
+  sample_rate: 1.0
+  # Additional resource attributes attached to every span
+  attributes:
+    environment: production
+    region: us-east-1</code></pre>
+
+  <p>For Agents, set <code>service_name</code> to <code>encodeswarmr-agent</code> and point <code>endpoint</code> at the same collector (or a local sidecar).</p>
+
+  <h2>Instrumented Components</h2>
+
+  <h3>HTTP Spans</h3>
+  <p>Every inbound REST API request to <code>/api/v1</code> produces a root span named <code>http.server.request</code> with the following attributes:</p>
+  <ul>
+    <li><code>http.method</code> — GET, POST, PUT, DELETE</li>
+    <li><code>http.route</code> — matched route pattern, e.g. <code>/api/v1/jobs/:id</code></li>
+    <li><code>http.status_code</code> — response status</li>
+    <li><code>http.request_content_length</code> — request body size in bytes</li>
+  </ul>
+
+  <h3>gRPC Spans</h3>
+  <p>All gRPC calls between the Controller and Agents are traced on both ends:</p>
+  <ul>
+    <li><code>grpc.client.request</code> — emitted by the Controller for each call to an Agent</li>
+    <li><code>grpc.server.request</code> — emitted by the Agent when processing a Controller request</li>
+    <li>Attributes: <code>rpc.system</code>, <code>rpc.service</code>, <code>rpc.method</code>, <code>rpc.grpc.status_code</code></li>
+  </ul>
+
+  <h3>job.expand Span</h3>
+  <p>When the Controller expands a job into tasks (e.g. chunking a source file), it emits a <code>job.expand</code> span with:</p>
+  <ul>
+    <li><code>job.id</code> — the UUID of the parent job</li>
+    <li><code>job.type</code> — encode / analysis / vmaf</li>
+    <li><code>job.chunk_count</code> — number of chunks produced</li>
+  </ul>
+
+  <h3>task.execute Span</h3>
+  <p>Each task dispatched to an Agent produces a <code>task.execute</code> span on the Agent side:</p>
+  <ul>
+    <li><code>task.id</code> — task UUID</li>
+    <li><code>task.codec</code> — e.g. <code>x265</code>, <code>svt-av1</code></li>
+    <li><code>task.preset</code> — preset name</li>
+    <li><code>agent.name</code> — identifier of the executing agent</li>
+    <li><code>task.input_bytes</code> — source file size</li>
+    <li><code>task.output_bytes</code> — encoded output size</li>
+  </ul>
+
+  <h2>Setup with Jaeger</h2>
+  <p>Run Jaeger locally using Docker and configure EncodeSwarmr to export to it:</p>
+  <pre><code># Start Jaeger all-in-one
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  jaegertracing/all-in-one:latest
+
+# config.yaml
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
+  service_name: "encodeswarmr-controller"
+  sample_rate: 1.0</code></pre>
+  <p>Open <a href="http://localhost:16686" target="_blank" rel="noopener">http://localhost:16686</a> to view traces in the Jaeger UI. Select <strong>encodeswarmr-controller</strong> or <strong>encodeswarmr-agent</strong> from the service dropdown.</p>
+
+  <h2>Disabling Tracing</h2>
+  <p>Set <code>tracing.enabled: false</code> in the configuration file to disable all telemetry export. The application will continue to function normally without a collector present. Alternatively, omit the <code>tracing</code> block entirely — tracing defaults to disabled.</p>
+  <pre><code>tracing:
+  enabled: false</code></pre>
+</DocsLayout>

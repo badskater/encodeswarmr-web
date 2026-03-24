@@ -1,0 +1,247 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Batch Import">
+  <h1>Batch Import</h1>
+  <p>
+    Batch Import lets you register large collections of source files in a single API call or web UI operation. It supports glob path patterns, recursive directory scanning, automatic media analysis, and optional immediate job submission — reducing a multi-step manual process to a single request.
+  </p>
+
+  <h2>API Reference</h2>
+
+  <h3>Submit a Batch Import</h3>
+  <pre><code>POST /api/v1/sources/batch-import
+Content-Type: application/json
+
+&#123;
+  "root_path": "/mnt/media/library",
+  "pattern": "**/*.mkv",
+  "recursive": true,
+  "auto_analyze": true,
+  "auto_encode": false,
+  "unc_to_nfs": &#123;
+    "\\\\nas01\\media": "/mnt/media"
+  &#125;,
+  "tags": ["library", "2024-import"],
+  "priority": 5
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>root_path</code></td>
+        <td>string</td>
+        <td>Yes</td>
+        <td>Absolute path (local or UNC) to the directory to scan. The scanner starts here and applies the pattern relative to this root.</td>
+      </tr>
+      <tr>
+        <td><code>pattern</code></td>
+        <td>string</td>
+        <td>No</td>
+        <td>Glob pattern relative to <code>root_path</code>. Defaults to <code>**/*</code> (all files, all depths). See glob syntax table below.</td>
+      </tr>
+      <tr>
+        <td><code>recursive</code></td>
+        <td>boolean</td>
+        <td>No</td>
+        <td>When <code>true</code> (default), descends into subdirectories. When <code>false</code>, only the immediate children of <code>root_path</code> are considered.</td>
+      </tr>
+      <tr>
+        <td><code>auto_analyze</code></td>
+        <td>boolean</td>
+        <td>No</td>
+        <td>When <code>true</code>, immediately submits a MediaInfo + HDR analysis job for each discovered file. Results are attached to the source record.</td>
+      </tr>
+      <tr>
+        <td><code>auto_encode</code></td>
+        <td>boolean</td>
+        <td>No</td>
+        <td>When <code>true</code>, submits an encoding job for each file using the flow or preset specified in <code>encode_config</code>. Requires <code>encode_config</code> to be provided.</td>
+      </tr>
+      <tr>
+        <td><code>encode_config</code></td>
+        <td>object</td>
+        <td>Conditional</td>
+        <td>Required when <code>auto_encode</code> is <code>true</code>. Contains <code>flow</code> or <code>preset</code>, <code>output_path_template</code>, and optional <code>agent_tags</code>.</td>
+      </tr>
+      <tr>
+        <td><code>unc_to_nfs</code></td>
+        <td>object</td>
+        <td>No</td>
+        <td>Map of UNC path prefixes to NFS mount point equivalents. Applied to discovered paths before storage. See path translation section.</td>
+      </tr>
+      <tr>
+        <td><code>tags</code></td>
+        <td>string[]</td>
+        <td>No</td>
+        <td>Array of tag strings applied to every registered source. Useful for grouping batch imports for later filtering.</td>
+      </tr>
+      <tr>
+        <td><code>priority</code></td>
+        <td>integer</td>
+        <td>No</td>
+        <td>Job priority (1–10) applied to any auto-submitted jobs. Default: <code>5</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Successful response:</p>
+  <pre><code>HTTP/1.1 202 Accepted
+&#123;
+  "import_id": "bimport_xyz789",
+  "status": "scanning",
+  "root_path": "/mnt/media/library",
+  "pattern": "**/*.mkv",
+  "files_discovered": 0,
+  "files_registered": 0,
+  "files_skipped": 0,
+  "created_at": "2024-11-14T10:00:00Z"
+&#125;</code></pre>
+
+  <h3>Get Batch Import Status</h3>
+  <pre><code>GET /api/v1/sources/batch-import/&#123;import_id&#125;
+
+HTTP/1.1 200 OK
+&#123;
+  "import_id": "bimport_xyz789",
+  "status": "completed",
+  "root_path": "/mnt/media/library",
+  "pattern": "**/*.mkv",
+  "files_discovered": 1247,
+  "files_registered": 1239,
+  "files_skipped": 8,
+  "skip_reasons": &#123;
+    "already_registered": 5,
+    "below_min_size": 2,
+    "unsupported_format": 1
+  &#125;,
+  "analyze_jobs_submitted": 1239,
+  "encode_jobs_submitted": 0,
+  "started_at": "2024-11-14T10:00:00Z",
+  "completed_at": "2024-11-14T10:02:34Z",
+  "duration_seconds": 154
+&#125;</code></pre>
+
+  <h2>Path Pattern Glob Syntax</h2>
+  <table>
+    <thead>
+      <tr><th>Pattern</th><th>Matches</th><th>Example</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>*</code></td>
+        <td>Any sequence of characters within a single path segment (does not cross directory boundaries)</td>
+        <td><code>*.mkv</code> — all MKV files in the current directory</td>
+      </tr>
+      <tr>
+        <td><code>**</code></td>
+        <td>Any sequence of path segments including directory separators (crosses boundaries)</td>
+        <td><code>**/*.mkv</code> — all MKV files at any depth</td>
+      </tr>
+      <tr>
+        <td><code>?</code></td>
+        <td>Any single character within a path segment</td>
+        <td><code>S0?E*.mkv</code> — season 1–9 episodes</td>
+      </tr>
+      <tr>
+        <td><code>[abc]</code></td>
+        <td>Any one of the listed characters</td>
+        <td><code>*.[mM][kK][vV]</code> — case-insensitive MKV</td>
+      </tr>
+      <tr>
+        <td><code>&#123;a,b&#125;</code></td>
+        <td>Either of the comma-separated alternatives</td>
+        <td><code>**/*.&#123;mkv,mp4,m4v&#125;</code> — MKV, MP4, or M4V at any depth</td>
+      </tr>
+      <tr>
+        <td><code>!</code> prefix</td>
+        <td>Negation — exclude files matching the pattern</td>
+        <td><code>!**/*-sample.*</code> — exclude any file with <code>-sample</code> in the name</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Multiple patterns can be passed as an array. Files are included if they match any non-negated pattern and are not excluded by any negation pattern:</p>
+  <pre><code>&#123;
+  "pattern": ["**/*.mkv", "**/*.mp4", "!**/*-sample.*", "!**/extras/**"]
+&#125;</code></pre>
+
+  <h2>Recursive Scanning</h2>
+  <p>
+    When <code>recursive</code> is <code>true</code> (the default), the scanner performs a breadth-first traversal of the directory tree rooted at <code>root_path</code>. Symbolic links are followed once; circular links are detected and skipped with a warning. Hidden directories (names starting with <code>.</code>) and system directories (<code>$RECYCLE.BIN</code>, <code>System Volume Information</code>) are always excluded.
+  </p>
+  <p>
+    For very large libraries (&gt;100,000 files), the scan itself may take several minutes. The batch import runs asynchronously; poll the status endpoint to track progress. The <code>files_discovered</code> counter increments in real time as the scan proceeds.
+  </p>
+
+  <h2>Auto-Analyze</h2>
+  <p>
+    When <code>auto_analyze</code> is <code>true</code>, the Controller submits one analysis job per registered source immediately after registration. The analysis job runs MediaInfo and HDR detection and stores the results in the source record. Analysis jobs are submitted at the priority specified in the batch import request.
+  </p>
+  <p>
+    Analysis results are available at <code>GET /api/v1/sources/&#123;id&#125;/analysis</code> once the analysis job completes. The <code>analyzed</code> field on the source record transitions from <code>false</code> to <code>true</code>.
+  </p>
+
+  <h2>Auto-Encode</h2>
+  <p>
+    When <code>auto_encode</code> is <code>true</code>, an encoding job is submitted for every newly registered source. If <code>auto_analyze</code> is also <code>true</code>, the encode job is chained to depend on the analysis job (so the encode does not start until analysis has completed and results are available for conditional flow nodes).
+  </p>
+  <p>
+    The <code>encode_config</code> object must be present and must contain either a <code>flow</code> or a <code>preset</code> field:
+  </p>
+  <pre><code>"encode_config": &#123;
+  "flow": "encode-4k-hdr10",
+  "output_path_template": "/mnt/output/&#123;source_name&#125;.mkv",
+  "agent_tags": ["gpu", "4k-capable"]
+&#125;</code></pre>
+
+  <h2>UNC to NFS Path Translation</h2>
+  <p>
+    Windows agents access shared storage via UNC paths (e.g., <code>\\nas01\media\film.mkv</code>), while Linux agents access the same storage via NFS mounts (e.g., <code>/mnt/media/film.mkv</code>). The <code>unc_to_nfs</code> map instructs the batch importer to rewrite path prefixes at registration time so that both agent types can resolve the source correctly.
+  </p>
+  <p>Example mapping:</p>
+  <table>
+    <thead>
+      <tr><th>UNC Prefix</th><th>NFS Mount Point</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>\\nas01\media</code></td><td><code>/mnt/nas01/media</code></td></tr>
+      <tr><td><code>\\nas01\archive</code></td><td><code>/mnt/nas01/archive</code></td></tr>
+      <tr><td><code>\\nas02\renders</code></td><td><code>/mnt/nas02/renders</code></td></tr>
+    </tbody>
+  </table>
+  <p>
+    The translation is applied to the path stored in the database. The original UNC path is preserved in the <code>original_path</code> field on the source record for reference. Agents running on Windows automatically translate back from the NFS path using the same mapping in reverse.
+  </p>
+
+  <h2>UI Walkthrough</h2>
+  <ol>
+    <li>Navigate to <strong>Sources &gt; Batch Import</strong>.</li>
+    <li>In the <strong>Root Path</strong> field, enter the base directory to scan. For UNC paths, use the backslash-escaped form: <code>\\nas01\media</code>.</li>
+    <li>Set the <strong>File Pattern</strong>. The default <code>**/*.&#123;mkv,mp4,m4v,ts&#125;</code> covers the most common video containers. Click <strong>Preview</strong> to see a sample of matching files without committing the import.</li>
+    <li>Toggle <strong>Recursive Scan</strong> on or off. Leave it on for library-level imports.</li>
+    <li>Enable <strong>Auto-Analyze</strong> if you want MediaInfo and HDR data collected immediately after registration.</li>
+    <li>Enable <strong>Auto-Encode</strong> and select a flow or preset if you want jobs submitted automatically. Set the output path template and any agent tag constraints.</li>
+    <li>Click <strong>Start Import</strong>. A progress panel appears showing live counters for discovered, registered, and skipped files. Click any row in the skipped list to see the skip reason.</li>
+  </ol>
+
+  <h2>Troubleshooting</h2>
+  <ul>
+    <li>
+      <strong>Files are discovered but not registered</strong> — Check the <code>skip_reasons</code> object in the status response. <code>already_registered</code> means the file's canonical path is already present in the source database. <code>below_min_size</code> means the file is smaller than the configured <code>min_source_size_bytes</code> (default: 1 MB). <code>unsupported_format</code> means the file extension is not in the allowlist.
+    </li>
+    <li>
+      <strong>Scan is very slow on a network share</strong> — Directory enumeration over SMB/NFS can be slow for large libraries. Consider increasing <code>scan_parallelism</code> in the Controller configuration (default: 4 concurrent directory reads) or running the scan from an agent co-located with the storage server.
+    </li>
+    <li>
+      <strong>UNC paths not resolving on Linux agents</strong> — Ensure the <code>unc_to_nfs</code> map is correct and that the NFS mount is active on the Linux agent. The path translation is applied at registration time; changes to the map after import do not retroactively update existing source records.
+    </li>
+    <li>
+      <strong>Import hangs in <code>scanning</code> status</strong> — Check the Controller logs for permission errors. The Controller service account must have read access to <code>root_path</code> and all subdirectories. On Windows, this often requires the service to run as a domain account rather than <code>LocalSystem</code>.
+    </li>
+  </ul>
+</DocsLayout>

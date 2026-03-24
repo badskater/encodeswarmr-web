@@ -1,0 +1,211 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Terraform — Azure">
+  <h1>Terraform — Azure</h1>
+  <p>
+    The Azure Terraform module deploys EncodeSwarmr into a dedicated resource group with a Linux VM for the
+    controller, a Virtual Machine Scale Set for agents, Azure Database for PostgreSQL, Azure Files for shared
+    storage, and an Azure Load Balancer.
+  </p>
+
+  <h2>Architecture</h2>
+  <pre><code>                    ┌──────────────────────────────────────┐
+                    │         Resource Group                 │
+                    │                                        │
+                    │  ┌────────────────────────────────┐   │
+                    │  │     Virtual Network             │   │
+                    │  │     10.0.0.0/16                 │   │
+                    │  │                                 │   │
+                    │  │  Public Subnet  10.0.1.0/24     │   │
+                    │  │  ┌──────────────────────────┐  │   │
+                    │  │  │  Azure Load Balancer      │  │   │
+                    │  │  │  (HTTP :8080, TCP :9443)  │  │   │
+                    │  │  └──────────┬───────────────┘  │   │
+                    │  │             │                   │   │
+                    │  │  Private Subnet  10.0.2.0/24   │   │
+                    │  │  ┌──────────▼──────────────┐   │   │
+                    │  │  │  Linux VM: Controller    │   │   │
+                    │  │  │  (Standard_D2s_v3)       │   │   │
+                    │  │  │  (+ 2nd VM in HA mode)   │   │   │
+                    │  │  └──────────┬───────────────┘  │   │
+                    │  │             │                   │   │
+                    │  │  ┌──────────▼──────────────┐   │   │
+                    │  │  │  Azure DB for PostgreSQL │   │   │
+                    │  │  │  (Flexible Server)       │   │   │
+                    │  │  └─────────────────────────┘   │   │
+                    │  │                                 │   │
+                    │  │  Agent Subnet  10.0.3.0/24      │   │
+                    │  │  ┌──────────────────────────┐  │   │
+                    │  │  │  VMSS: Agent Instances   │  │   │
+                    │  │  │  (Standard_F8s_v2)       │  │   │
+                    │  │  └──────────────────────────┘  │   │
+                    │  │                                 │   │
+                    │  │  ┌──────────────────────────┐  │   │
+                    │  │  │  Azure Files Share        │  │   │
+                    │  │  │  (shared media storage)   │  │   │
+                    │  │  └──────────────────────────┘  │   │
+                    │  └────────────────────────────────┘   │
+                    └──────────────────────────────────────┘</code></pre>
+
+  <h2>Standard vs HA Mode</h2>
+  <p>
+    <strong>Standard mode</strong> deploys a single controller VM behind the load balancer with a single-zone
+    Flexible PostgreSQL server. This is suitable for development, staging, or workloads that can tolerate brief
+    downtime during maintenance.
+  </p>
+  <p>
+    <strong>HA mode</strong> deploys two controller VMs in separate Availability Zones, a zone-redundant Azure
+    Database for PostgreSQL Flexible Server, and cross-zone VMSS agent placement. The load balancer routes HTTP
+    and gRPC traffic across both controllers.
+  </p>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li>Terraform 1.6 or later</li>
+    <li>Azure CLI installed and authenticated (<code>az login</code>)</li>
+    <li>An active Azure subscription</li>
+    <li>Contributor role on the subscription or a resource group pre-created with appropriate permissions</li>
+    <li>The <code>Microsoft.Compute</code>, <code>Microsoft.Network</code>, <code>Microsoft.DBforPostgreSQL</code>, and <code>Microsoft.Storage</code> resource providers registered in the subscription</li>
+  </ul>
+
+  <h2>Quick Start</h2>
+
+  <h3>1. Authenticate with Azure</h3>
+  <pre><code>az login
+az account set --subscription "My Subscription"</code></pre>
+
+  <h3>2. Configure variables</h3>
+  <pre><code>cd deploy/terraform/azure
+cp terraform.tfvars.example terraform.tfvars
+$EDITOR terraform.tfvars</code></pre>
+
+  <pre><code># terraform.tfvars
+location             = "eastus"
+resource_group_name  = "encodeswarmr-rg"
+encodeswarmr_version = "1.2.0"
+
+# Controller
+controller_vm_size   = "Standard_D2s_v3"
+
+# Agents
+agent_vm_size        = "Standard_F8s_v2"
+agent_min_count      = 1
+agent_max_count      = 10
+agent_desired_count  = 2
+
+# Database
+db_sku_name          = "Standard_D2ds_v4"
+db_admin_username    = "encodeswarmr"
+db_admin_password    = "changeme-use-key-vault"
+
+# Storage
+azure_files_quota_gb = 1024
+
+# Optional
+# public_ip_domain_label = "encodeswarmr-myco"</code></pre>
+
+  <h3>3. Deploy</h3>
+  <pre><code>terraform init
+terraform plan
+terraform apply</code></pre>
+
+  <h3>4. Upload mTLS Certificates</h3>
+  <p>After the initial deployment, upload your mTLS certificates to the controller VM:</p>
+  <pre><code># Get the controller VM public IP from Terraform outputs
+CONTROLLER_IP=$(terraform output -raw controller_public_ip)
+
+# Copy certificates
+scp -r certs/ azureuser@$&#123;CONTROLLER_IP&#125;:/etc/encodeswarmr/
+
+# SSH into the controller and restart the service
+ssh azureuser@$&#123;CONTROLLER_IP&#125;
+sudo systemctl restart encodeswarmr-controller</code></pre>
+
+  <h3>5. Verify</h3>
+  <pre><code># Check the load balancer public IP
+terraform output load_balancer_ip
+
+# Open the web UI
+curl http://$(terraform output -raw load_balancer_ip):8080/health</code></pre>
+
+  <h2>Toggle HA Mode</h2>
+  <pre><code># Enable HA — adds a second controller VM and zone-redundant DB
+terraform apply -var="ha_enabled=true" -var="controller_count=2" -var="db_zone_redundant=true"
+
+# Disable HA (revert)
+terraform apply -var="ha_enabled=false" -var="controller_count=1" -var="db_zone_redundant=false"</code></pre>
+
+  <h2>Cost Estimate</h2>
+
+  <h3>Standard Deployment (East US, approximate)</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Controller VM</td><td>Standard_D2s_v3 (On-Demand)</td><td>~$70</td></tr>
+      <tr><td>Agent VMSS</td><td>2 × Standard_F8s_v2</td><td>~$560</td></tr>
+      <tr><td>Azure DB PostgreSQL</td><td>Standard_D2ds_v4, 32 GB</td><td>~$105</td></tr>
+      <tr><td>Load Balancer</td><td>Standard</td><td>~$20</td></tr>
+      <tr><td>Azure Files</td><td>1 TB LRS</td><td>~$55</td></tr>
+      <tr><td>Public IPs</td><td>2 static</td><td>~$7</td></tr>
+      <tr><td>Data transfer</td><td>variable</td><td>~$20</td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td><strong>~$837/mo</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>HA Deployment (East US, approximate)</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Controller VMs</td><td>2 × Standard_D2s_v3</td><td>~$140</td></tr>
+      <tr><td>Agent VMSS</td><td>4 × Standard_F8s_v2</td><td>~$1,120</td></tr>
+      <tr><td>Azure DB PostgreSQL</td><td>Standard_D2ds_v4, Zone-redundant</td><td>~$210</td></tr>
+      <tr><td>Load Balancer</td><td>Standard (zone-redundant)</td><td>~$25</td></tr>
+      <tr><td>Azure Files</td><td>1 TB ZRS</td><td>~$75</td></tr>
+      <tr><td>Public IPs</td><td>3 static</td><td>~$11</td></tr>
+      <tr><td>Data transfer</td><td>variable</td><td>~$35</td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td><strong>~$1,616/mo</strong></td></tr>
+    </tbody>
+  </table>
+  <p>Use Azure Spot VMs for agents by setting <code>agent_use_spot = true</code> to reduce agent costs by up to 80%.</p>
+
+  <h2>Scale Agents</h2>
+  <pre><code># Scale out agent VMSS immediately (overrides autoscale)
+az vmss scale \
+  --resource-group encodeswarmr-rg \
+  --name encodeswarmr-agents \
+  --new-capacity 6
+
+# Or via Terraform
+terraform apply -var="agent_desired_count=6"</code></pre>
+
+  <h2>Cleanup</h2>
+  <pre><code># Destroy all resources in the resource group
+terraform destroy
+
+# Alternatively, delete the resource group directly (faster)
+az group delete --name encodeswarmr-rg --yes --no-wait</code></pre>
+
+  <h2>File Reference</h2>
+  <table>
+    <thead>
+      <tr><th>File</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>main.tf</code></td><td>Root module — calls sub-modules and sets providers</td></tr>
+      <tr><td><code>variables.tf</code></td><td>All input variable declarations with defaults</td></tr>
+      <tr><td><code>outputs.tf</code></td><td>Load balancer IP, controller IP, FQDN, etc.</td></tr>
+      <tr><td><code>terraform.tfvars.example</code></td><td>Example values — copy to <code>terraform.tfvars</code></td></tr>
+      <tr><td><code>modules/network/</code></td><td>VNet, subnets, NSGs, public IPs</td></tr>
+      <tr><td><code>modules/controller/</code></td><td>Controller VM(s), managed disks, NIC, availability zone</td></tr>
+      <tr><td><code>modules/agents/</code></td><td>VMSS, autoscale settings, custom script extension</td></tr>
+      <tr><td><code>modules/database/</code></td><td>Azure DB for PostgreSQL Flexible Server</td></tr>
+      <tr><td><code>modules/storage/</code></td><td>Storage account, Azure Files share, mount configuration</td></tr>
+      <tr><td><code>modules/lb/</code></td><td>Azure Load Balancer, backend pools, health probes, rules</td></tr>
+    </tbody>
+  </table>
+</DocsLayout>

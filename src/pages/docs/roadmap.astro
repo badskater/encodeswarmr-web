@@ -1,0 +1,93 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Roadmap">
+  <h1>Roadmap</h1>
+  <p>
+    This roadmap tracks planned features and improvements for EncodeSwarmr. Items marked with ✅ are complete. Items without a marker are planned or in progress.
+  </p>
+
+  <h2>Phase 1 — UI Completeness</h2>
+  <ul>
+    <li>✅ Job list with status, progress, and actions</li>
+    <li>✅ Agent list with health indicators and capability badges</li>
+    <li>✅ Preset editor with codec and quality settings</li>
+    <li>✅ Settings pages (general, branding, plugins, users)</li>
+  </ul>
+
+  <h2>Phase 2 — Hardening</h2>
+  <ul>
+    <li>End-to-end integration test suite covering job lifecycle</li>
+    <li>Agent reconnection with exponential back-off and jitter</li>
+    <li>Graceful Controller shutdown with in-flight job handover</li>
+    <li>Rate limiting on the REST API</li>
+    <li>PostgreSQL connection pooling via PgBouncer support</li>
+  </ul>
+
+  <h2>Phase 3 — Chunked Encoding UI</h2>
+  <ul>
+    <li>Per-chunk progress bars in the job detail view</li>
+    <li>Chunk-level retry UI with individual chunk status</li>
+    <li>Visualise scene-cut detection results before encoding starts</li>
+  </ul>
+
+  <h2>Phase 4 — Observability &amp; Polish</h2>
+  <ul>
+    <li>OpenTelemetry trace propagation through the full job lifecycle</li>
+    <li>Structured JSON logging with correlation IDs</li>
+    <li>Grafana dashboard enhancements (per-chunk panels, error breakdown)</li>
+    <li>VMAF score trend charts in the job detail view</li>
+    <li>Capacity planning report export (PDF/CSV)</li>
+  </ul>
+
+  <h2>Phase 5 — Advanced Features</h2>
+  <ul>
+    <li>Flow Pipeline Editor — visual node graph for multi-step encode workflows</li>
+    <li>Job Chaining — automatically trigger downstream jobs on completion</li>
+    <li>Dolby Vision metadata passthrough and RPU injection</li>
+    <li>HDR tone-mapping presets for SDR deliverables</li>
+  </ul>
+
+  <h2>Phase 6 — Production Readiness</h2>
+  <ul>
+    <li>Automated certificate rotation for agent mTLS certificates</li>
+    <li>LDAP / Active Directory authentication backend</li>
+    <li>SAML 2.0 SSO support</li>
+    <li>Role-based access control (RBAC) with custom roles</li>
+    <li>Audit log for all user and API actions</li>
+    <li>Multi-tenancy with per-tenant job isolation</li>
+    <li>High-availability Controller with active-passive failover</li>
+    <li>Distributed lock manager for HA scheduler coordination</li>
+    <li>Backup and restore tooling for the Controller database</li>
+    <li>Agent auto-upgrade triggered from the Controller UI</li>
+    <li>FIPS 140-2 compliant TLS cipher suite configuration</li>
+    <li>Network policy documentation for Kubernetes deployments</li>
+    <li>CIS benchmark hardening guide for container images</li>
+    <li>SBOM (Software Bill of Materials) generation in CI</li>
+    <li>CVE scanning integration in the release pipeline</li>
+    <li>Signed release binaries and container images</li>
+  </ul>
+
+  <h2>Phase 7 — Workflow &amp; Operations</h2>
+  <ul>
+    <li>Webhook retry with configurable back-off and dead-letter queue</li>
+    <li>Email notification templates (HTML + plain text)</li>
+    <li>Slack and Microsoft Teams notification integrations</li>
+    <li>PagerDuty integration for agent-down alerts</li>
+    <li>Auto-scaling agent pool based on queue depth (Kubernetes HPA)</li>
+    <li>Cloud spot/preemptible instance support with graceful preemption handling</li>
+    <li>Intelligent retry with per-error-class back-off strategies</li>
+    <li>Output validation with configurable VMAF and bitrate thresholds</li>
+    <li>Cost estimation report before job submission</li>
+    <li>Job export and archival to S3 / Azure Blob / GCS</li>
+    <li>Template versioning with diff view and rollback</li>
+    <li>Batch import from CSV, S3 bucket listing, or watch folder</li>
+    <li>Watch folder daemon for automatic job creation on file arrival</li>
+    <li>Cloud storage browser in the source file picker</li>
+    <li>Terraform modules for AWS, Azure, and GCP deployments</li>
+    <li>Ansible roles for bare-metal Controller and Agent deployment</li>
+    <li>Helm chart for Kubernetes with autoscaling and PodDisruptionBudgets</li>
+    <li>Upgrade runbook and migration scripts for major version bumps</li>
+    <li>Public plugin registry for community-contributed codec plugins</li>
+  </ul>
+</DocsLayout>

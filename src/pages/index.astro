@@ -66,22 +66,30 @@ import Layout from '../layouts/Layout.astro';
 
   <!-- Stats Strip -->
   <section class="border-y border-surface-800 bg-surface-900/50">
-    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-6 py-12 md:grid-cols-4">
+    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-6 py-12 sm:grid-cols-3 md:grid-cols-6">
       <div class="text-center">
         <div class="text-3xl font-bold text-white">Go</div>
-        <div class="mt-1 text-sm text-surface-200">Single Binary</div>
+        <div class="mt-1 text-xs text-surface-200">Single Binary</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">35</div>
+        <div class="mt-1 text-xs text-surface-200">Flow Nodes</div>
       </div>
       <div class="text-center">
         <div class="text-3xl font-bold text-white">3</div>
-        <div class="mt-1 text-sm text-surface-200">GPU Vendors</div>
+        <div class="mt-1 text-xs text-surface-200">GPU Vendors</div>
       </div>
       <div class="text-center">
-        <div class="text-3xl font-bold text-white">gRPC</div>
-        <div class="mt-1 text-sm text-surface-200">mTLS Secured</div>
+        <div class="text-3xl font-bold text-white">13</div>
+        <div class="mt-1 text-xs text-surface-200">Audio Codecs</div>
+      </div>
+      <div class="text-center">
+        <div class="text-3xl font-bold text-white">10</div>
+        <div class="mt-1 text-xs text-surface-200">Encoding Presets</div>
       </div>
       <div class="text-center">
         <div class="text-3xl font-bold text-white">HA</div>
-        <div class="mt-1 text-sm text-surface-200">Active-Passive</div>
+        <div class="mt-1 text-xs text-surface-200">Active-Passive</div>
       </div>
     </div>
   </section>
@@ -96,7 +104,7 @@ import Layout from '../layouts/Layout.astro';
         </p>
       </div>
 
-      <div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+      <div class="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <div class="rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-surface-700">
           <div class="mb-4 inline-flex rounded-lg bg-primary-500/10 p-3 text-primary-400">
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -199,9 +207,9 @@ import Layout from '../layouts/Layout.astro';
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </div>
-          <h3 class="text-lg font-semibold text-white">Self-Upgrade</h3>
+          <h3 class="text-lg font-semibold text-white">Flow Pipeline Editor</h3>
           <p class="mt-2 text-sm text-surface-200">
-            Agents self-upgrade with SHA-256 verified binary downloads and automatic rollback. Zero-touch agent enrollment.
+            Visual drag-and-drop workflow designer with 35 node types across 9 categories. Build encoding pipelines like FileFlows or Node-RED.
           </p>
         </div>
       </div>
@@ -290,39 +298,66 @@ import Layout from '../layouts/Layout.astro';
         Built on proven, production-ready technologies.
       </p>
 
-      <div class="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">Go 1.25+</div>
-          <div class="mt-1 text-xs text-surface-200">Core language</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">gRPC</div>
-          <div class="mt-1 text-xs text-surface-200">Agent comms</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">PostgreSQL 16</div>
-          <div class="mt-1 text-xs text-surface-200">Primary DB</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">React 19</div>
-          <div class="mt-1 text-xs text-surface-200">Web UI</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">Vite 8</div>
-          <div class="mt-1 text-xs text-surface-200">Frontend build</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">Tailwind CSS</div>
-          <div class="mt-1 text-xs text-surface-200">Styling</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">Prometheus</div>
-          <div class="mt-1 text-xs text-surface-200">Metrics</div>
-        </div>
-        <div class="rounded-lg border border-surface-800 bg-surface-900/50 p-4 text-center">
-          <div class="font-semibold text-white">Docker</div>
-          <div class="mt-1 text-xs text-surface-200">Deployment</div>
-        </div>
+      <div class="mx-auto mt-12 max-w-5xl overflow-hidden rounded-xl border border-surface-800">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-surface-700 bg-surface-800">
+              <th class="px-6 py-3 font-semibold text-white">Concern</th>
+              <th class="px-6 py-3 font-semibold text-white">Choice</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-surface-800">
+            <tr><td class="px-6 py-3 text-surface-200">Language</td><td class="px-6 py-3 text-white">Go 1.25+ (CGO-free static binaries)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Agent comms</td><td class="px-6 py-3 text-white">gRPC + mTLS (protobuf)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">REST API</td><td class="px-6 py-3 text-white">stdlib net/http + OpenAPI 3.1</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Web UI</td><td class="px-6 py-3 text-white">React 19 + Vite 8 (embedded via embed.FS)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Database</td><td class="px-6 py-3 text-white">PostgreSQL 16+ with pgx</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">DB HA</td><td class="px-6 py-3 text-white">Patroni + pgBouncer (optional)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Migrations</td><td class="px-6 py-3 text-white">golang-migrate (plain SQL, embedded)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Agent offline store</td><td class="px-6 py-3 text-white">SQLite via modernc/sqlite (pure Go)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Auth</td><td class="px-6 py-3 text-white">Session cookies + OIDC SSO + API keys</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Observability</td><td class="px-6 py-3 text-white">Prometheus + Grafana + OpenTelemetry</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">Containerisation</td><td class="px-6 py-3 text-white">Docker multi-stage build (~30 MB image)</td></tr>
+            <tr><td class="px-6 py-3 text-surface-200">CI</td><td class="px-6 py-3 text-white">GitHub Actions</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Deploy Anywhere Section -->
+  <section class="border-t border-surface-800 bg-surface-900/30 py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <h2 class="text-center text-3xl font-bold text-white sm:text-4xl">Deploy anywhere</h2>
+      <p class="mx-auto mt-4 max-w-2xl text-center text-lg text-surface-200">
+        From a single Docker Compose to multi-cloud HA clusters.
+      </p>
+
+      <div class="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <a href="/docs/deployment" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Docker Compose</div>
+          <p class="mt-2 text-sm text-surface-200">Quick setup on a single host with PostgreSQL.</p>
+        </a>
+        <a href="/docs/ansible" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Ansible</div>
+          <p class="mt-2 text-sm text-surface-200">On-prem with .deb/.rpm packages. Standard, HA, and Docker modes.</p>
+        </a>
+        <a href="/docs/terraform-aws" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Terraform — AWS</div>
+          <p class="mt-2 text-sm text-surface-200">EC2, RDS, EFS, ALB/NLB. Multi-AZ HA support.</p>
+        </a>
+        <a href="/docs/terraform-azure" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Terraform — Azure</div>
+          <p class="mt-2 text-sm text-surface-200">VMs, VMSS, PostgreSQL Flexible Server, Key Vault.</p>
+        </a>
+        <a href="/docs/terraform-gcp" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Terraform — GCP</div>
+          <p class="mt-2 text-sm text-surface-200">Compute Engine, Cloud SQL, Filestore, Secret Manager.</p>
+        </a>
+        <a href="/docs/kubernetes" class="group rounded-xl border border-surface-800 bg-surface-900/50 p-6 transition-colors hover:border-primary-500/30">
+          <div class="text-lg font-semibold text-white group-hover:text-primary-400">Kubernetes (Helm)</div>
+          <p class="mt-2 text-sm text-surface-200">Helm chart with HPA auto-scaling for agents.</p>
+        </a>
       </div>
     </div>
   </section>
@@ -341,14 +376,20 @@ import Layout from '../layouts/Layout.astro';
         <div class="flex gap-4">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">1</div>
           <div class="flex-1">
-            <h3 class="font-semibold text-white">Clone and start the stack</h3>
+            <h3 class="font-semibold text-white">Build and start the stack</h3>
             <div class="mt-3 overflow-hidden rounded-lg border border-surface-700 bg-surface-900">
               <div class="border-b border-surface-700 px-4 py-2">
                 <span class="text-xs text-surface-200">bash</span>
               </div>
-              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code>git clone https://github.com/badskater/encodeswarmr.git
-cd encodeswarmr
-docker compose up -d</code></pre>
+              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code># Build everything
+make all
+
+# Start Controller + PostgreSQL
+cd deployments && docker compose up -d
+
+# Apply database migrations
+DATABASE_URL="postgres://distenc:&lt;pass&gt;@localhost:5432/encodeswarmr?sslmode=disable" \
+  make migrate-up</code></pre>
             </div>
           </div>
         </div>
@@ -366,14 +407,20 @@ docker compose up -d</code></pre>
         <div class="flex gap-4">
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-sm font-bold text-white">3</div>
           <div class="flex-1">
-            <h3 class="font-semibold text-white">Install agents on your encoding machines</h3>
+            <h3 class="font-semibold text-white">Install agents on encoding machines</h3>
             <div class="mt-3 overflow-hidden rounded-lg border border-surface-700 bg-surface-900">
               <div class="border-b border-surface-700 px-4 py-2">
-                <span class="text-xs text-surface-200">PowerShell / bash</span>
+                <span class="text-xs text-surface-200">Windows (GUI) / Linux (bash)</span>
               </div>
-              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code>encodeswarmr-agent install \
-  --controller https://&lt;ip&gt;:9443 \
-  --token &lt;enrollment-token&gt;</code></pre>
+              <pre class="overflow-x-auto p-4 font-mono text-sm text-surface-200"><code># Windows — download the GUI installer from GitHub Releases
+# encodeswarmr-agent-setup.exe
+
+# Linux
+sudo CONTROLLER_ADDRESS=encoder.example.com:9443 \
+  ./scripts/install-agent-linux.sh
+
+# Approve the agent
+controller agent approve &lt;hostname&gt;</code></pre>
             </div>
           </div>
         </div>

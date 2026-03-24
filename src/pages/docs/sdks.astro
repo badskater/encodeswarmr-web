@@ -1,0 +1,147 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="API Client SDKs">
+  <h1>API Client SDKs</h1>
+  <p>
+    EncodeSwarmr ships with pre-generated API client libraries for TypeScript and Go. The clients are generated from the OpenAPI 3.1 specification at <code>/api/v1/openapi.json</code> using <a href="https://github.com/oapi-codegen/oapi-codegen">oapi-codegen</a> (Go) and the OpenAPI Generator TypeScript Fetch client (TypeScript). They live in the repository under <code>api/generated/</code> and are regenerated automatically on every API schema change in CI.
+  </p>
+
+  <h2>OpenAPI Spec Location</h2>
+  <p>
+    The canonical OpenAPI 3.1 specification is embedded in the Controller binary and served at runtime:
+  </p>
+  <pre><code>GET /api/v1/openapi.json</code></pre>
+  <p>
+    The source YAML file in the repository is at <code>api/openapi.yaml</code>. This file is the single source of truth; all generated clients and the served JSON are derived from it.
+  </p>
+
+  <h2>Pre-generated Client Stubs</h2>
+  <p>
+    Ready-to-use client stubs are checked into the repository at <code>api/generated/</code>. You can import them directly without running any code generation tooling yourself.
+  </p>
+  <pre><code>api/
+└── generated/
+    ├── typescript/
+    │   ├── src/
+    │   │   ├── api.ts          # All API operations as typed async functions
+    │   │   ├── models.ts       # Request/response types (interfaces)
+    │   │   └── index.ts        # Barrel export
+    │   ├── package.json
+    │   └── tsconfig.json
+    └── go/
+        ├── client.gen.go       # HTTP client with typed methods
+        ├── types.gen.go        # Go structs for all request/response bodies
+        └── go.mod</code></pre>
+
+  <h2>Regenerate Clients Locally</h2>
+  <p>
+    If you have modified <code>api/openapi.yaml</code> or want to pin to a specific generator version, regenerate the clients locally with the following commands.
+  </p>
+
+  <h3>TypeScript</h3>
+  <p>Install the generator:</p>
+  <pre><code>npm install -g @openapitools/openapi-generator-cli</code></pre>
+  <p>Generate the client:</p>
+  <pre><code>npx openapi-generator-cli generate \
+  -i api/openapi.yaml \
+  -g typescript-fetch \
+  -o api/generated/typescript \
+  --additional-properties=supportsES6=true,typescriptThreePlus=true</code></pre>
+  <p>
+    The generated client uses the native <code>fetch</code> API, so it works in both Node.js (18+) and browser environments without additional dependencies. To use it in your project, either copy the <code>api/generated/typescript/src/</code> directory into your codebase or link the package locally.
+  </p>
+
+  <h3>Go</h3>
+  <p>Install oapi-codegen:</p>
+  <pre><code>go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest</code></pre>
+  <p>Generate client and types:</p>
+  <pre><code>go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen \
+  --config api/oapi-codegen-config.yaml \
+  api/openapi.yaml</code></pre>
+  <p>
+    The <code>api/oapi-codegen-config.yaml</code> file in the repository configures the output paths, package name, and which templates to use. By default it generates both the types (<code>types.gen.go</code>) and the <code>net/http</code>-based client (<code>client.gen.go</code>).
+  </p>
+
+  <h2>Generated Output</h2>
+  <table>
+    <thead>
+      <tr><th>File</th><th>Language</th><th>Contents</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>api/generated/typescript/src/api.ts</code></td>
+        <td>TypeScript</td>
+        <td>One typed async function per API operation. Functions accept a typed request object and return a typed response. Errors throw a typed <code>ApiError</code> with status code and Problem Details body.</td>
+      </tr>
+      <tr>
+        <td><code>api/generated/typescript/src/models.ts</code></td>
+        <td>TypeScript</td>
+        <td>TypeScript interfaces for every request body, response body, and enum defined in the OpenAPI spec. Nullable fields are typed as <code>T | null</code>; optional fields use <code>?</code>.</td>
+      </tr>
+      <tr>
+        <td><code>api/generated/typescript/src/index.ts</code></td>
+        <td>TypeScript</td>
+        <td>Barrel re-export of all public symbols from <code>api.ts</code> and <code>models.ts</code>.</td>
+      </tr>
+      <tr>
+        <td><code>api/generated/go/client.gen.go</code></td>
+        <td>Go</td>
+        <td>A <code>Client</code> struct with one method per API operation. Each method accepts a <code>context.Context</code> and a typed request struct, and returns a typed response struct and an <code>error</code>.</td>
+      </tr>
+      <tr>
+        <td><code>api/generated/go/types.gen.go</code></td>
+        <td>Go</td>
+        <td>Go structs for all request/response bodies and enums. Struct fields are tagged with <code>json:</code> tags matching the API field names. Nullable fields use <code>*T</code> pointer types.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Example: TypeScript Client Usage</h2>
+  <pre><code>import &#123; JobsApi, Configuration &#125; from './api/generated/typescript/src';
+
+const api = new JobsApi(new Configuration(&#123;
+  basePath: 'https://controller',
+  headers: &#123;
+    'Authorization': `Bearer $&#123;process.env.API_KEY&#125;`
+  &#125;
+&#125;));
+
+const job = await api.createJob(&#123;
+  sourceId: 'src_abc123',
+  pipeline: &#123; type: 'preset', preset: '1080p-x265-quality' &#125;,
+  output: &#123; path: '/mnt/output/&#123;source_name&#125;.mkv' &#125;
+&#125;);
+
+console.log('Job created:', job.data.id);</code></pre>
+
+  <h2>Example: Go Client Usage</h2>
+  <pre><code>package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"github.com/badskater/encodeswarmr/api/generated/go"
+)
+
+func main() &#123;
+	client, _ := encodeswarmr.NewClientWithResponses(
+		"https://controller",
+		encodeswarmr.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error &#123;
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+			return nil
+		&#125;),
+	)
+
+	resp, _ := client.CreateJobWithResponse(context.Background(), encodeswarmr.CreateJobRequest&#123;
+		SourceId: "src_abc123",
+		Pipeline: encodeswarmr.Pipeline&#123;Type: "preset", Preset: strPtr("1080p-x265-quality")&#125;,
+		Output:   encodeswarmr.OutputConfig&#123;Path: "/mnt/output/&#123;source_name&#125;.mkv"&#125;,
+	&#125;)
+
+	fmt.Println("Job created:", resp.JSON201.Data.Id)
+&#125;</code></pre>
+</DocsLayout>

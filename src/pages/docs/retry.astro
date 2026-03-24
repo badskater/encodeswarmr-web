@@ -1,0 +1,185 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Intelligent Retry">
+  <h1>Intelligent Retry</h1>
+  <p>
+    EncodeSwarmr classifies encoding failures into error categories and applies different retry policies depending on whether the failure is likely to resolve itself. Transient errors (network blips, temporary resource exhaustion) are retried aggressively; permanent errors (corrupt source file, invalid configuration) are not retried at all. Unknown errors receive a conservative retry policy.
+  </p>
+
+  <h2>Error Classification</h2>
+  <table>
+    <thead>
+      <tr><th>Category</th><th>Description</th><th>Examples</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Transient</strong></td>
+        <td>Failures expected to be temporary; retrying is likely to succeed</td>
+        <td>Network timeout during segment upload, agent OOM-killed, agent lost connectivity mid-job, disk full on agent (temporary)</td>
+      </tr>
+      <tr>
+        <td><strong>Permanent</strong></td>
+        <td>Failures that cannot be resolved by retrying with the same inputs</td>
+        <td>Source file is corrupt or unreadable, codec not supported by agent, invalid filter graph, output validation failure after max retries</td>
+      </tr>
+      <tr>
+        <td><strong>Unknown</strong></td>
+        <td>Failures whose root cause cannot be determined from the exit code or error message</td>
+        <td>Non-zero ffmpeg exit without a parseable error message, unexpected signal, agent crashed without error log</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Retry Policies per Error Type</h2>
+  <table>
+    <thead>
+      <tr><th>Error Type</th><th>Max Attempts</th><th>Backoff</th><th>On Exhaustion</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Transient</td><td>8</td><td>Exponential with jitter (base 15s, max 30min)</td><td>Job marked <code>failed</code>; operator alerted</td></tr>
+      <tr><td>Permanent</td><td>1 (no retry)</td><td>—</td><td>Job marked <code>failed</code> immediately</td></tr>
+      <tr><td>Unknown</td><td>3</td><td>Exponential with jitter (base 30s, max 5min)</td><td>Job marked <code>failed</code>; operator alerted</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Exponential Backoff with Jitter</h2>
+  <p>
+    The delay before each retry attempt uses full-jitter exponential backoff to spread load across agents after a cluster-wide event:
+  </p>
+  <pre><code>delay = random_uniform(0, min(max_delay, base * 2 ^ attempt))</code></pre>
+  <p>
+    For transient errors (base = 15s, max = 1800s), the expected retry schedule looks like:
+  </p>
+  <table>
+    <thead>
+      <tr><th>Attempt</th><th>Window (before jitter)</th><th>Typical delay</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>0–30s</td><td>~15s</td></tr>
+      <tr><td>2</td><td>0–60s</td><td>~30s</td></tr>
+      <tr><td>3</td><td>0–120s</td><td>~60s</td></tr>
+      <tr><td>4</td><td>0–240s</td><td>~2min</td></tr>
+      <tr><td>5</td><td>0–480s</td><td>~4min</td></tr>
+      <tr><td>6</td><td>0–960s</td><td>~8min</td></tr>
+      <tr><td>7</td><td>0–1800s (capped)</td><td>~15min</td></tr>
+      <tr><td>8</td><td>0–1800s (capped)</td><td>~15min</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Per-Job Retry Configuration</h2>
+  <p>Override retry settings for individual jobs at submission time via the API:</p>
+  <pre><code>POST /api/v1/jobs
+Content-Type: application/json
+
+&#123;
+  "name": "my-encode",
+  "source": "s3://bucket/input.mkv",
+  "template_id": "h264-1080p",
+  "retry": &#123;
+    "max_attempts": 5,
+    "disable_intelligent": false
+  &#125;
+&#125;</code></pre>
+
+  <p>You can also set system-wide defaults in <code>controller.yaml</code>:</p>
+  <pre><code>retry:
+  default_max_attempts: 8
+  transient_max_attempts: 8
+  unknown_max_attempts: 3
+  permanent_max_attempts: 1
+  base_delay_seconds: 15
+  max_delay_seconds: 1800</code></pre>
+
+  <h2>Error Category Badges in UI</h2>
+  <p>The job detail page displays a colour-coded badge next to the last error message to show the classification:</p>
+  <table>
+    <thead>
+      <tr><th>Badge</th><th>Colour</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Transient</strong></td><td>Yellow / amber</td><td>A temporary failure; the job will be retried automatically</td></tr>
+      <tr><td><strong>Permanent</strong></td><td>Red</td><td>The job cannot be retried; manual intervention is required</td></tr>
+      <tr><td><strong>Unknown</strong></td><td>Orange</td><td>Classification uncertain; limited retries will be attempted</td></tr>
+      <tr><td><strong>Exhausted</strong></td><td>Dark red</td><td>All retry attempts have been consumed; the job is permanently failed</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Viewing Retry History</h2>
+  <p>
+    The <strong>Retry History</strong> tab on the job detail page shows every attempt with:
+  </p>
+  <ul>
+    <li>Attempt number and timestamp</li>
+    <li>Agent that processed the attempt</li>
+    <li>Error category badge</li>
+    <li>Raw error message or ffmpeg stderr excerpt</li>
+    <li>Delay before the next attempt (or "final failure" if exhausted)</li>
+  </ul>
+  <p>Retry history is also available via the API:</p>
+  <pre><code>GET /api/v1/jobs/&#123;id&#125;/attempts
+Authorization: Bearer &lt;token&gt;
+
+# Response:
+&#123;
+  "attempts": [
+    &#123;
+      "attempt": 1,
+      "agent_id": "agent-a1b2",
+      "started_at": "2025-06-01T10:00:00Z",
+      "failed_at": "2025-06-01T10:02:34Z",
+      "error_category": "transient",
+      "error_message": "network timeout uploading segment 4",
+      "next_retry_at": "2025-06-01T10:02:49Z"
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h2>Disabling Intelligent Retry</h2>
+  <p>
+    If you want all failures to be treated identically (no error classification), set <code>disable_intelligent: true</code> in the per-job retry block or globally in <code>controller.yaml</code>:
+  </p>
+  <pre><code># Per-job (API):
+"retry": &#123;
+  "max_attempts": 3,
+  "disable_intelligent": true
+&#125;
+
+# Global (controller.yaml):
+retry:
+  disable_intelligent: true
+  default_max_attempts: 3</code></pre>
+  <p>With intelligent retry disabled, all errors are treated as <em>unknown</em> and the <code>default_max_attempts</code> policy applies.</p>
+
+  <h2>Configuration Reference</h2>
+  <pre><code>retry:
+  disable_intelligent: false
+  default_max_attempts: 8
+  transient_max_attempts: 8
+  unknown_max_attempts: 3
+  permanent_max_attempts: 1
+  base_delay_seconds: 15
+  max_delay_seconds: 1800
+
+  # Error pattern overrides — patterns are matched against the ffmpeg
+  # stderr output or the agent error message using Go regexp syntax.
+  permanent_error_patterns:
+    - "Invalid data found when processing input"
+    - "No such file or directory"
+    - "codec not currently supported in container"
+    - "Unrecognized option"
+
+  transient_error_patterns:
+    - "Connection timed out"
+    - "Broken pipe"
+    - "No space left on device"
+    - "signal: killed"</code></pre>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/preemption">Job Preemption</a> — Interrupt low-priority jobs for high-priority ones</li>
+    <li><a href="/docs/validation">Output Validation</a> — Validate encoded output before marking a job complete</li>
+    <li><a href="/docs/auto-scaling">Auto-Scaling</a> — Dynamically adjust agent capacity</li>
+  </ul>
+</DocsLayout>

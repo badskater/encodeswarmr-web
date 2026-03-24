@@ -1,0 +1,147 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Capacity Planning">
+  <h1>Capacity Planning</h1>
+  <p>
+    Use this guide to estimate the number of agents, hardware specifications, storage, and network bandwidth required for your EncodeSwarmr deployment.
+  </p>
+
+  <h2>Agent Count</h2>
+
+  <h3>Rule of Thumb Formula</h3>
+  <pre><code>agents_needed = ceil(
+  (daily_source_hours * encode_ratio) / (agent_throughput_hours * encoding_hours_per_day)
+)</code></pre>
+  <p>Where <code>encode_ratio</code> is typically 1.0–3.0 (encode takes 1–3× source duration) and <code>encoding_hours_per_day</code> is the window during which agents are active (e.g. 20 hours).</p>
+
+  <h3>Codec Speed Reference</h3>
+  <table>
+    <thead>
+      <tr><th>Codec</th><th>Preset / Quality</th><th>CPU Speed (fps)</th><th>GPU Speed (fps)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>x265</td><td>medium / CRF 20</td><td>8–15 fps</td><td>N/A</td></tr>
+      <tr><td>x265</td><td>slow / CRF 20</td><td>3–6 fps</td><td>N/A</td></tr>
+      <tr><td>x264</td><td>medium / CRF 20</td><td>40–80 fps</td><td>N/A</td></tr>
+      <tr><td>SVT-AV1</td><td>preset 6</td><td>20–40 fps</td><td>N/A</td></tr>
+      <tr><td>NVENC H.265</td><td>p4 / CQ 24</td><td>N/A</td><td>120–200 fps</td></tr>
+      <tr><td>NVENC AV1</td><td>p4 / CQ 28</td><td>N/A</td><td>80–140 fps</td></tr>
+      <tr><td>QSV H.265</td><td>medium</td><td>N/A</td><td>90–150 fps</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Calculation Example</h3>
+  <p>Scenario: 50 hours of source content per day, x265 medium CRF 20 (encode ratio 2.5×, 12 fps per agent), 20 active hours/day.</p>
+  <pre><code>agent_throughput_hours = (12 fps * 3600 s/hr) / (24 fps * 3600) = 0.5 source-hours/hr
+agents_needed = ceil((50 * 2.5) / (0.5 * 20)) = ceil(125 / 10) = 13 agents</code></pre>
+
+  <h3>Headroom Note</h3>
+  <p>Add at least <strong>20% headroom</strong> above the calculated agent count to absorb peak loads, agent maintenance windows, and re-encodes triggered by quality failures. For production deployments handling SLA-bound content, 30–50% headroom is recommended.</p>
+
+  <h2>CPU/GPU Requirements per Agent</h2>
+
+  <h3>CPU-Only Agents</h3>
+  <table>
+    <thead>
+      <tr><th>Codec</th><th>Min Cores</th><th>Recommended Cores</th><th>RAM</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>x264</td><td>4</td><td>8</td><td>4 GB</td></tr>
+      <tr><td>x265</td><td>8</td><td>16</td><td>8 GB</td></tr>
+      <tr><td>SVT-AV1</td><td>8</td><td>16–32</td><td>8 GB</td></tr>
+    </tbody>
+  </table>
+
+  <h3>GPU-Accelerated Agents</h3>
+  <table>
+    <thead>
+      <tr><th>GPU</th><th>VRAM</th><th>Concurrent Sessions</th><th>Host RAM</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>NVIDIA RTX 3080</td><td>10 GB</td><td>2</td><td>16 GB</td></tr>
+      <tr><td>NVIDIA RTX 4090</td><td>24 GB</td><td>4</td><td>32 GB</td></tr>
+      <tr><td>NVIDIA A40</td><td>48 GB</td><td>8</td><td>64 GB</td></tr>
+      <tr><td>Intel Arc A770</td><td>16 GB</td><td>2</td><td>16 GB</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Concurrent GPU Sessions</h3>
+  <p>Each concurrent NVENC/QSV session consumes a separate hardware encoder slot. NVIDIA consumer GPUs (GeForce series) are limited to <strong>2 concurrent NVENC sessions</strong> by driver policy unless using the <a href="https://github.com/keylase/nvidia-patch" target="_blank" rel="noopener">NVENC unlock patch</a>. Quadro/Data Center GPUs have no such limit. Set <code>agent.max_concurrent_jobs</code> accordingly.</p>
+
+  <h2>Storage Sizing</h2>
+
+  <h3>Source Files</h3>
+  <table>
+    <thead>
+      <tr><th>Content Type</th><th>Bitrate</th><th>Storage per Hour</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1080p SDR (ProRes 422)</td><td>~147 Mbps</td><td>~65 GB</td></tr>
+      <tr><td>1080p SDR (H.264 high)</td><td>~8 Mbps</td><td>~3.6 GB</td></tr>
+      <tr><td>4K HDR (ProRes 4444)</td><td>~590 Mbps</td><td>~265 GB</td></tr>
+      <tr><td>4K HDR (H.265 main10)</td><td>~20 Mbps</td><td>~9 GB</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Output Files</h3>
+  <p>Output size depends on codec and quality settings. As a rough guide, a well-tuned x265 or NVENC encode at CRF/CQ 20 produces output at approximately 40–60% of a comparable H.264 source. Budget output storage at the same order of magnitude as source storage unless you are replacing originals.</p>
+
+  <h3>Temp Storage per Agent</h3>
+  <p>Each agent requires local scratch space for chunk segments during adaptive chunked encoding. Allocate at minimum <strong>3× the size of the largest expected source file</strong> per agent on the local temp drive. For 4K ProRes sources this may be 300–800 GB per agent.</p>
+
+  <h3>Database Storage</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Initial Size</th><th>Growth Estimate</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>PostgreSQL (Controller)</td><td>&lt; 100 MB</td><td>~50 MB per 10,000 completed jobs</td></tr>
+      <tr><td>SQLite journal (per Agent)</td><td>&lt; 10 MB</td><td>Negligible; rotated automatically</td></tr>
+      <tr><td>Grafana database</td><td>&lt; 50 MB</td><td>Stable after initial dashboard import</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Network Bandwidth</h2>
+
+  <h3>NAS / File Server to Agent</h3>
+  <table>
+    <thead>
+      <tr><th>Source Bitrate</th><th>Agents Reading Concurrently</th><th>Required LAN Bandwidth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>147 Mbps (1080p ProRes)</td><td>4</td><td>~600 Mbps</td></tr>
+      <tr><td>590 Mbps (4K ProRes)</td><td>4</td><td>~2.4 Gbps</td></tr>
+      <tr><td>20 Mbps (4K H.265)</td><td>10</td><td>~200 Mbps</td></tr>
+    </tbody>
+  </table>
+  <p>Use a dedicated 10 GbE network or storage VLAN when handling multiple simultaneous high-bitrate reads. NFS and SMB perform similarly at scale; NFS typically has lower CPU overhead on Linux agents.</p>
+
+  <h3>Agent to Controller (gRPC)</h3>
+  <p>gRPC progress heartbeats and status updates are lightweight — approximately <strong>10–50 KB/s per active agent</strong>. A 100 Mbps link to the Controller is sufficient for up to 500 concurrent agents.</p>
+
+  <h3>Internet / External Bandwidth</h3>
+  <p>If using cloud storage (S3, Azure Blob, GCS) for source or output, size your egress/ingress bandwidth to match your throughput requirements. Cloud storage transfers typically incur egress costs; consider co-locating agents in the same cloud region as the storage bucket to minimise both cost and latency.</p>
+
+  <h2>Quick-Reference Worksheet</h2>
+  <pre><code>## Inputs
+daily_source_hours    = ___
+encode_ratio          = ___   # typically 1.0–3.0
+agent_fps             = ___   # from codec table
+encoding_hours_per_day = ___  # active window
+
+## Agent Count
+agent_throughput = agent_fps * 3600 / (source_fps * 3600)
+                 = agent_fps / source_fps   (source-hours per encode-hour)
+agents_raw  = (daily_source_hours * encode_ratio) / (agent_throughput * encoding_hours_per_day)
+agents_needed = ceil(agents_raw * 1.2)     # +20% headroom
+
+## Storage (GB)
+source_storage  = daily_source_hours * bitrate_Mbps * 3600 / 8 / 1024 / 1024
+output_storage  = source_storage * output_ratio   # ~0.5 for H.265
+temp_per_agent  = largest_source_file_GB * 3
+db_growth_GB    = (annual_jobs / 10000) * 0.05
+
+## Network (Mbps)
+nas_bandwidth   = concurrent_reads * source_bitrate_Mbps * 1.1  # 10% overhead</code></pre>
+</DocsLayout>

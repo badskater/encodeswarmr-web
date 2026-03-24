@@ -1,120 +1,363 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
 ---
-
 <DocsLayout title="Configuration">
   <h1>Configuration Reference</h1>
   <p>
-    EncodeSwarmr is configured via YAML files. The Controller and Agent each have their own configuration file.
+    EncodeSwarmr components are configured through YAML files. Environment variables take precedence over file values and are the recommended approach for secrets in containerised or systemd deployments.
   </p>
 
-  <h2>Controller Configuration</h2>
-  <p>Default location: <code>/etc/encodeswarmr/controller.yaml</code> or passed via <code>--config</code> flag.</p>
+  <h2>Agent Configuration — <code>agent.yaml</code></h2>
+  <p>
+    Default locations: <code>C:\ProgramData\EncodeSwarmr\agent.yaml</code> (Windows) or <code>/etc/encodeswarmr/agent.yaml</code> (Linux). Pass an alternate path with the <code>--config</code> flag.
+  </p>
+  <p>
+    The full annotated reference is shown below. All fields are optional unless marked <strong>required</strong>.
+  </p>
 
-  <h3>Server</h3>
-  <pre><code>server:
-  http_addr: ":8080"        # REST API + Web UI listen address
-  grpc_addr: ":9443"        # gRPC agent service listen address
-  tls:
-    cert: /path/to/cert.pem
-    key: /path/to/key.pem
-    ca: /path/to/ca.pem     # CA for mTLS agent verification</code></pre>
-
-  <h3>Database</h3>
-  <pre><code>database:
-  host: localhost
-  port: 5432
-  name: encodeswarmr
-  user: encodeswarmr
-  password: changeme
-  sslmode: prefer
-  max_open_conns: 25
-  max_idle_conns: 5</code></pre>
-
-  <h3>Authentication</h3>
-  <pre><code>auth:
-  session_secret: "generate-a-secure-random-string"
-  token_ttl: 24h
-  oidc:
-    enabled: false
-    issuer: https://auth.example.com
-    client_id: encodeswarmr
-    client_secret: secret
-    redirect_url: https://encodeswarmr.example.com/auth/callback
-    role_claim: groups
-    role_mapping:
-      admin: encodeswarmr-admins
-      operator: encodeswarmr-operators
-      viewer: encodeswarmr-viewers</code></pre>
-
-  <h3>Storage</h3>
-  <pre><code>storage:
-  media_paths:
-    - /mnt/media/input
-    - /mnt/media/output
-  cloud:
-    s3:
-      bucket: my-encodes
-      region: us-east-1
-    gcs:
-      bucket: my-encodes
-    azure:
-      container: my-encodes
-      account: storageaccount</code></pre>
-
-  <h3>Webhooks</h3>
-  <pre><code>webhooks:
-  - name: discord-notifications
-    url: https://discord.com/api/webhooks/...
-    provider: discord    # discord | teams | slack
-    secret: hmac-secret  # HMAC-SHA256 signing key
-    events:
-      - job.completed
-      - job.failed
-      - agent.offline</code></pre>
-
-  <h3>Rate Limiting</h3>
-  <pre><code>rate_limit:
-  requests_per_second: 200
-  burst: 400</code></pre>
-
-  <h2>Agent Configuration</h2>
-  <p>Default location: <code>C:\ProgramData\EncodeSwarmr\agent.yaml</code> (Windows) or <code>/etc/encodeswarmr/agent.yaml</code> (Linux).</p>
-
-  <pre><code>controller:
+  <pre><code># ============================================================
+# controller — how the agent reaches the controller
+# ============================================================
+controller:
+  # (required) gRPC address of the controller, host:port
   address: "controller.example.com:9443"
+
   tls:
-    cert: /path/to/agent-cert.pem
-    key: /path/to/agent-key.pem
-    ca: /path/to/ca.pem
+    # Path to the agent's TLS certificate (issued by the controller CA)
+    cert: /etc/encodeswarmr/certs/agent.crt
+    # Path to the agent's TLS private key
+    key: /etc/encodeswarmr/certs/agent.key
+    # Path to the controller CA certificate for server verification
+    ca: /etc/encodeswarmr/certs/ca.crt
 
+  reconnect:
+    # Initial delay before the first reconnect attempt
+    initial_interval: 5s
+    # Maximum delay cap for exponential back-off
+    max_interval: 5m
+    # Multiplier applied to the interval after each failed attempt (e.g. 2 = double)
+    multiplier: 2.0
+    # Optional upper bound on total reconnect duration (0 = unlimited)
+    max_elapsed_time: 0
+
+# ============================================================
+# agent — identity and runtime behaviour
+# ============================================================
 agent:
-  name: "encode-node-01"       # Display name in the UI
-  work_dir: "C:\\Temp\\encodes" # Temporary working directory
-  max_concurrent_jobs: 2       # Parallel job limit
-  gpu:
-    auto_detect: true          # Auto-detect GPU capabilities
-    # Or specify manually:
-    # type: nvenc
-    # device: 0</code></pre>
+  # Display name shown in the controller UI.
+  # Defaults to the system hostname when left blank.
+  hostname: ""
 
-  <h2>Environment Variables</h2>
-  <p>All configuration values can be overridden via environment variables with the <code>ESWR_</code> prefix:</p>
+  # Directory used for temporary encode working files.
+  # The agent creates per-job subdirectories inside this path.
+  # Windows default: C:\ProgramData\EncodeSwarmr\work
+  # Linux default:   /var/lib/encodeswarmr/work
+  work_dir: ""
+
+  # Directory where per-job log files are written.
+  # Windows default: C:\ProgramData\EncodeSwarmr\logs
+  # Linux default:   /var/log/encodeswarmr
+  log_dir: ""
+
+  # Path to the SQLite journal used for offline operation.
+  # Stores in-progress job state so work survives connectivity loss.
+  # Windows default: C:\ProgramData\EncodeSwarmr\agent.db
+  # Linux default:   /var/lib/encodeswarmr/agent.db
+  offline_db: ""
+
+  # Interval at which the agent sends a heartbeat to the controller.
+  heartbeat_interval: 30s
+
+  # How often the agent polls the controller for new job assignments
+  # when it has no active job.
+  poll_interval: 10s
+
+  # Whether to automatically delete the job working directory after a
+  # job completes successfully.
+  cleanup_on_success: true
+
+  # Whether to keep the job working directory after a job fails.
+  # Useful for post-mortem inspection of partial outputs and logs.
+  keep_failed_work_dir: false
+
+# ============================================================
+# tools — paths to external encoder binaries
+# ============================================================
+# Leave any path blank to use the system PATH for that binary.
+tools:
+  # ffmpeg executable path
+  # Windows default: C:\Program Files\EncodeSwarmr\tools\ffmpeg.exe
+  # Linux default:   (resolved from PATH)
+  ffmpeg: ""
+
+  # ffprobe executable path (used for source analysis)
+  ffprobe: ""
+
+  # x265 CLI encoder path (standalone, separate from the libx265 built into ffmpeg)
+  x265: ""
+
+  # x264 CLI encoder path
+  x264: ""
+
+  # SVT-AV1 encoder path (SvtAv1EncApp)
+  svt_av1: ""
+
+  # AviSynth pipe helper (avs2pipemod or similar)
+  avs_pipe: ""
+
+  # VapourSynth pipe helper (vspipe)
+  vspipe: ""
+
+# ============================================================
+# gpu — GPU detection and resource management
+# ============================================================
+gpu:
+  # Master switch for GPU-accelerated encoding.
+  # When false the agent will never advertise GPU capabilities
+  # to the controller regardless of what hardware is present.
+  enabled: true
+
+  # Detected or manually specified GPU vendor.
+  # Valid values: auto | nvidia | amd | intel
+  # "auto" runs vendor detection probes on startup.
+  vendor: "auto"
+
+  # Maximum GPU VRAM (in MiB) the agent is allowed to allocate for encode jobs.
+  # Set to 0 to use the full available VRAM.
+  max_vram_mb: 0
+
+  # How often the agent samples GPU utilisation and temperature.
+  monitor_interval: 5s
+
+# ============================================================
+# allowed_shares — UNC / NFS path whitelist
+# ============================================================
+# List of UNC prefixes (Windows) or mount-point prefixes (Linux)
+# that the agent is permitted to read from and write to.
+# Jobs referencing paths outside this list are rejected.
+#
+# Example:
+#   allowed_shares:
+#     - "\\\\nas01\\media"
+#     - "\\\\nas02\\archive"
+#     - "/mnt/nas"
+allowed_shares: []
+
+# ============================================================
+# logging — log output configuration
+# ============================================================
+logging:
+  # Log verbosity level: debug | info | warn | error
+  level: "info"
+
+  # Log output format: json | text
+  format: "json"
+
+  # Maximum size of a single log file before rotation, in MiB.
+  max_size_mb: 100
+
+  # Number of rotated log files to keep (not counting the current one).
+  max_backups: 5
+
+  # Whether to gzip-compress rotated log files.
+  compress: true
+
+  # Size of the in-memory channel used to buffer log lines streamed
+  # to the controller (for display in the UI job log pane).
+  stream_buffer_size: 1000
+
+  # How often buffered log lines are flushed to the controller gRPC stream.
+  stream_flush_interval: 500ms</code></pre>
+
+  <h2>Controller Environment Variables</h2>
+  <p>
+    The controller binary reads its configuration from <code>/etc/encodeswarmr/controller.yaml</code> (or the path given by <code>--config</code>). Any value in that file can be overridden by a matching environment variable. This is the recommended method for injecting secrets in Docker or systemd deployments.
+  </p>
+
   <table>
     <thead>
-      <tr><th>Variable</th><th>Config Path</th></tr>
+      <tr><th>Environment Variable</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>ESWR_DATABASE_HOST</code></td><td>database.host</td></tr>
-      <tr><td><code>ESWR_DATABASE_PASSWORD</code></td><td>database.password</td></tr>
-      <tr><td><code>ESWR_SERVER_HTTP_ADDR</code></td><td>server.http_addr</td></tr>
-      <tr><td><code>ESWR_AUTH_SESSION_SECRET</code></td><td>auth.session_secret</td></tr>
+      <tr>
+        <td><code>DE_DB_PASS</code></td>
+        <td>PostgreSQL password. Overrides <code>database.password</code> in the YAML.</td>
+      </tr>
+      <tr>
+        <td><code>DE_DB_HOST</code></td>
+        <td>PostgreSQL host (and optional port, e.g. <code>db.internal:5432</code>). Overrides <code>database.host</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_DB_NAME</code></td>
+        <td>PostgreSQL database name. Overrides <code>database.name</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_GRPC_TLS_CERT</code></td>
+        <td>Path to the controller's gRPC TLS certificate (PEM). Overrides <code>server.tls.cert</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_GRPC_TLS_KEY</code></td>
+        <td>Path to the controller's gRPC TLS private key (PEM). Overrides <code>server.tls.key</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_GRPC_TLS_CA</code></td>
+        <td>Path to the CA certificate used to verify agent mTLS certificates. Overrides <code>server.tls.ca</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_HTTP_PORT</code></td>
+        <td>Port the HTTP REST API and web UI binds to. Default: <code>8080</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_GRPC_PORT</code></td>
+        <td>Port the gRPC agent service binds to. Default: <code>9443</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_SESSION_SECRET</code></td>
+        <td>Secret key used to sign and verify HTTP session cookies. Must be at least 32 bytes of random data. Overrides <code>auth.session_secret</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_OIDC_CLIENT_ID</code></td>
+        <td>OAuth 2.0 / OIDC client identifier. Overrides <code>auth.oidc.client_id</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_OIDC_CLIENT_SECRET</code></td>
+        <td>OAuth 2.0 / OIDC client secret. Overrides <code>auth.oidc.client_secret</code>.</td>
+      </tr>
+      <tr>
+        <td><code>DE_WEBHOOK_HMAC_SECRET</code></td>
+        <td>Default HMAC-SHA256 signing secret for outbound webhook payloads. Can be overridden per-webhook in the YAML.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Precedence</h3>
+  <p>
+    Configuration values are resolved in the following order, with higher entries winning:
+  </p>
+  <ol>
+    <li>Environment variables (highest priority)</li>
+    <li>YAML configuration file</li>
+    <li>Built-in defaults (lowest priority)</li>
+  </ol>
+  <p>
+    This means you can commit a <code>controller.yaml</code> with safe defaults and inject secrets exclusively through environment variables or a secrets manager, keeping credentials out of version control.
+  </p>
+
+  <h2>Agent State Machine</h2>
+  <p>
+    The agent progresses through the following states during normal operation. Understanding this diagram helps diagnose stuck or unexpected agent states in the UI.
+  </p>
+  <pre><code>
+  ┌─────────────────┐
+  │   INITIALISING  │  Agent process started; loading config,
+  └────────┬────────┘  probing GPU, opening SQLite journal.
+           │
+           ▼
+  ┌─────────────────┐
+  │   REGISTERING   │  Dialling controller gRPC; presenting
+  └────────┬────────┘  mTLS certificate for mutual auth.
+           │
+           ▼
+  ┌─────────────────┐
+  │    PENDING      │  Connected; waiting for an administrator
+  └────────┬────────┘  to approve the agent in the web UI.
+           │  (approved)
+           ▼
+  ┌─────────────────┐
+  │     IDLE        │◄─────────────────────────────┐
+  └────────┬────────┘  Polling for new job assignments.    │
+           │  (job assigned)                               │
+           ▼                                              │
+  ┌─────────────────┐                                     │
+  │   PREPARING     │  Validating paths, checking tool    │
+  └────────┬────────┘  availability, creating work dir.   │
+           │                                              │
+           ▼                                              │
+  ┌─────────────────┐                                     │
+  │    ENCODING     │  Spawning encoder process;           │
+  └────────┬────────┘  streaming progress to controller.  │
+           │                                              │
+           ▼                                              │
+  ┌─────────────────┐                                     │
+  │   REPORTING     │  Uploading result metadata,          │
+  └────────┬────────┘  finalising output, cleaning up.    │
+           │                                              │
+           └──────────────────────────────────────────────┘
+                        (return to IDLE)
+
+  At any point, loss of connectivity transitions to:
+
+  ┌─────────────────┐
+  │   OFFLINE       │  Journal buffers in-progress state;
+  └────────┬────────┘  exponential back-off reconnect loop.
+           │  (reconnected)
+           ▼
+      (resume prior state)
+  </code></pre>
+
+  <h2>Technology Stack</h2>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Technology</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Controller API</td>
+        <td>Go (net/http + chi router)</td>
+        <td>REST API serving JSON; also hosts the embedded web UI</td>
+      </tr>
+      <tr>
+        <td>Agent ↔ Controller transport</td>
+        <td>gRPC (protobuf) over mTLS</td>
+        <td>Bidirectional streaming for job dispatch and log tailing</td>
+      </tr>
+      <tr>
+        <td>Controller database</td>
+        <td>PostgreSQL 15+</td>
+        <td>Stores jobs, agents, templates, users, audit log</td>
+      </tr>
+      <tr>
+        <td>Agent offline journal</td>
+        <td>SQLite (via modernc/sqlite)</td>
+        <td>Pure-Go driver; no CGO required</td>
+      </tr>
+      <tr>
+        <td>Web UI</td>
+        <td>React 18 + Vite + Tailwind CSS</td>
+        <td>Embedded into the controller binary via Go embed</td>
+      </tr>
+      <tr>
+        <td>Authentication</td>
+        <td>Session cookies + optional OIDC</td>
+        <td>Roles: admin, operator, viewer</td>
+      </tr>
+      <tr>
+        <td>Schema migrations</td>
+        <td>golang-migrate</td>
+        <td>Applied automatically on controller startup</td>
+      </tr>
+      <tr>
+        <td>Observability</td>
+        <td>Prometheus metrics + OpenTelemetry traces</td>
+        <td>Exported on <code>/metrics</code> (HTTP) and OTLP gRPC endpoint</td>
+      </tr>
+      <tr>
+        <td>Agent platform (Windows)</td>
+        <td>Go 1.25, Windows Service API</td>
+        <td>Inno Setup installer; runs as LocalSystem or a named service account</td>
+      </tr>
+      <tr>
+        <td>Agent platform (Linux)</td>
+        <td>Go 1.25, systemd</td>
+        <td>Packaged as <code>.deb</code> / <code>.rpm</code>; runs as <code>encodeswarmr</code> user</td>
+      </tr>
     </tbody>
   </table>
 
   <h2>Next Steps</h2>
   <ul>
-    <li><a href="/docs/agents">Agent Management</a> — Enrollment, monitoring, and upgrades</li>
+    <li><a href="/docs/agents">Agent Specification</a> — Detailed agent internals, GPU detection, offline operation</li>
+    <li><a href="/docs/getting-started">Getting Started</a> — Install and run your first encode</li>
     <li><a href="/docs/api">API Reference</a> — Programmatic access to EncodeSwarmr</li>
   </ul>
 </DocsLayout>

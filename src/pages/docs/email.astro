@@ -1,0 +1,165 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Email Notifications">
+  <h1>Email Notifications</h1>
+  <p>
+    EncodeSwarmr can send email notifications to users for key job and agent events. Notifications are delivered via SMTP and each user can configure their own preferences through the API or the web UI.
+  </p>
+
+  <h2>SMTP Configuration</h2>
+  <p>Configure the SMTP server in <code>controller.yaml</code>:</p>
+  <pre><code>email:
+  enabled: true
+  smtp_host: smtp.example.com
+  smtp_port: 587
+  smtp_username: notifications@example.com
+  smtp_password: "s3cr3t"
+  smtp_tls: true           # STARTTLS on port 587; set false for plain
+  from_address: "EncodeSwarmr &lt;notifications@example.com&gt;"
+  from_name: EncodeSwarmr
+  reply_to: ""             # optional reply-to address</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>enabled</code></td><td>bool</td><td>Master switch for all email notifications</td></tr>
+      <tr><td><code>smtp_host</code></td><td>string</td><td>Hostname or IP of your SMTP server</td></tr>
+      <tr><td><code>smtp_port</code></td><td>int</td><td>SMTP port (587 for STARTTLS, 465 for TLS, 25 for plain)</td></tr>
+      <tr><td><code>smtp_username</code></td><td>string</td><td>SMTP authentication username</td></tr>
+      <tr><td><code>smtp_password</code></td><td>string</td><td>SMTP authentication password; supports env var substitution</td></tr>
+      <tr><td><code>smtp_tls</code></td><td>bool</td><td>Enable STARTTLS negotiation</td></tr>
+      <tr><td><code>from_address</code></td><td>string</td><td>RFC 5322 sender address shown in the From header</td></tr>
+      <tr><td><code>from_name</code></td><td>string</td><td>Display name shown alongside the from address</td></tr>
+      <tr><td><code>reply_to</code></td><td>string</td><td>Optional Reply-To header address</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Email Templates</h2>
+  <p>EncodeSwarmr ships three built-in email templates. Templates use Go's <code>text/template</code> syntax and have access to the event payload.</p>
+
+  <h3>job_completed</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Value</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Subject</td><td><code>&#91;EncodeSwarmr&#93; Job "&#123;&#123;.JobName&#125;&#125;" completed</code></td></tr>
+      <tr><td>Body</td><td>Plain-text and HTML variants; includes job name, duration, output file size, output path, and a link to the job detail page</td></tr>
+    </tbody>
+  </table>
+
+  <h3>job_failed</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Value</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Subject</td><td><code>&#91;EncodeSwarmr&#93; Job "&#123;&#123;.JobName&#125;&#125;" failed</code></td></tr>
+      <tr><td>Body</td><td>Includes job name, error classification, last error message, retry count, and a link to the job detail page</td></tr>
+    </tbody>
+  </table>
+
+  <h3>agent_stale</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Value</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Subject</td><td><code>&#91;EncodeSwarmr&#93; Agent "&#123;&#123;.AgentName&#125;&#125;" is stale</code></td></tr>
+      <tr><td>Body</td><td>Includes agent name, last-seen timestamp, hostname, and a link to the agent detail page</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Per-User Notification Preferences</h2>
+
+  <h3>GET /api/v1/me/notifications</h3>
+  <p>Retrieve the current user's notification preferences.</p>
+  <pre><code>GET /api/v1/me/notifications
+Authorization: Bearer &lt;token&gt;
+
+# Response 200 OK:
+&#123;
+  "job_completed": true,
+  "job_failed": true,
+  "agent_stale": false,
+  "webhook_filter_user_only": true
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Preference</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>job_completed</code></td><td><code>true</code></td><td>Send an email when one of the user's jobs completes successfully</td></tr>
+      <tr><td><code>job_failed</code></td><td><code>true</code></td><td>Send an email when one of the user's jobs fails permanently</td></tr>
+      <tr><td><code>agent_stale</code></td><td><code>false</code></td><td>Send an email when an agent goes stale (admin-scoped events)</td></tr>
+      <tr><td><code>webhook_filter_user_only</code></td><td><code>true</code></td><td>Only receive email for jobs submitted by this user (see below)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>PUT /api/v1/me/notifications</h3>
+  <p>Update notification preferences. All fields are optional; omitted fields are left unchanged.</p>
+  <pre><code>PUT /api/v1/me/notifications
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+&#123;
+  "job_completed": true,
+  "job_failed": true,
+  "agent_stale": true,
+  "webhook_filter_user_only": false
+&#125;
+
+# Response 204 No Content</code></pre>
+
+  <h2>webhook_filter_user_only</h2>
+  <p>
+    When <code>webhook_filter_user_only</code> is <code>true</code> (the default), a user only receives email notifications for jobs that they themselves submitted. Admins who set this to <code>false</code> will receive notifications for <em>all</em> jobs in the system, which is useful for operations teams monitoring the full queue.
+  </p>
+
+  <h2>Test Email Endpoint</h2>
+  <p>Send a test email to the current user to verify SMTP configuration and template rendering:</p>
+  <pre><code>POST /api/v1/me/notifications/test
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+&#123;
+  "template": "job_completed"
+&#125;
+
+# Response 202 Accepted:
+&#123;
+  "message": "Test email queued for delivery"
+&#125;</code></pre>
+  <p>Valid values for <code>template</code> are <code>job_completed</code>, <code>job_failed</code>, and <code>agent_stale</code>. The email is sent to the address associated with the authenticated user's account.</p>
+
+  <h2>How Notifications Are Wired</h2>
+  <ol>
+    <li>The Controller emits an internal event (e.g. <code>job.completed</code>) when a job transitions state.</li>
+    <li>The notification service receives the event and looks up all users who have the corresponding preference enabled.</li>
+    <li>If <code>webhook_filter_user_only</code> is enabled for a user, the service checks whether the job belongs to that user; if not, the notification is skipped.</li>
+    <li>The service renders the appropriate email template with the event payload and enqueues the message in the outbox table.</li>
+    <li>A background worker drains the outbox, delivers messages over SMTP, and records success or failure with the next retry time.</li>
+  </ol>
+
+  <h2>UI Walkthrough</h2>
+  <p>Users can manage their preferences directly in the web UI:</p>
+  <ol>
+    <li>Click your avatar in the top-right corner and select <strong>Profile &amp; Notifications</strong>.</li>
+    <li>Scroll to the <strong>Email Notifications</strong> section.</li>
+    <li>Toggle the switches for <strong>Job Completed</strong>, <strong>Job Failed</strong>, and <strong>Agent Stale</strong>.</li>
+    <li>Toggle <strong>My jobs only</strong> to control the <code>webhook_filter_user_only</code> setting.</li>
+    <li>Click <strong>Save Preferences</strong>. A confirmation toast appears on success.</li>
+    <li>Use the <strong>Send test email</strong> button to verify delivery before relying on it in production.</li>
+  </ol>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/webhooks">Webhooks</a> — Push notifications to Discord, Teams, and Slack</li>
+    <li><a href="/docs/auto-scaling">Auto-Scaling</a> — Dynamically adjust agent capacity based on queue depth</li>
+  </ul>
+</DocsLayout>

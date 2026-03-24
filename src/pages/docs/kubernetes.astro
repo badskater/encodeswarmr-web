@@ -1,0 +1,183 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Kubernetes (Helm)">
+  <h1>Kubernetes (Helm)</h1>
+  <p>
+    EncodeSwarmr ships a Helm chart for deploying to any Kubernetes cluster (EKS, AKS, GKE, or self-hosted).
+    The chart supports horizontal pod autoscaling for agents, persistent volume claims for shared storage, and
+    optional ingress with TLS termination.
+  </p>
+
+  <h2>Quick Start</h2>
+  <pre><code># Add the EncodeSwarmr Helm repository
+helm repo add encodeswarmr https://charts.encodeswarmr.io
+helm repo update
+
+# Install with default values
+helm install encodeswarmr encodeswarmr/encodeswarmr \
+  --namespace encodeswarmr \
+  --create-namespace \
+  --set controller.replicas=1 \
+  --set agent.replicas=2 \
+  --set persistence.size=500Gi \
+  --set postgresql.password=changeme
+
+# Or use a values file
+helm install encodeswarmr encodeswarmr/encodeswarmr \
+  --namespace encodeswarmr \
+  --create-namespace \
+  -f my-values.yaml</code></pre>
+
+  <h2>Chart Templates</h2>
+  <table>
+    <thead>
+      <tr><th>Template</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>deployment-controller.yaml</code></td><td>Controller <code>Deployment</code> with configurable replica count, resource requests/limits, and mTLS cert volume mounts</td></tr>
+      <tr><td><code>deployment-agent.yaml</code></td><td>Agent <code>Deployment</code> (or <code>DaemonSet</code> if <code>agent.daemonSet=true</code>) with tool volume mounts and working directory</td></tr>
+      <tr><td><code>service.yaml</code></td><td><code>Service</code> resources — <code>ClusterIP</code> for internal gRPC, <code>LoadBalancer</code> or <code>NodePort</code> for HTTP</td></tr>
+      <tr><td><code>configmap.yaml</code></td><td><code>ConfigMap</code> for controller and agent YAML configuration</td></tr>
+      <tr><td><code>secret.yaml</code></td><td><code>Secret</code> for database credentials, secret key, and mTLS certificates</td></tr>
+      <tr><td><code>pvc.yaml</code></td><td><code>PersistentVolumeClaim</code> for shared media storage (ReadWriteMany)</td></tr>
+      <tr><td><code>ingress.yaml</code></td><td><code>Ingress</code> resource for HTTP traffic with optional TLS; disabled by default</td></tr>
+      <tr><td><code>hpa.yaml</code></td><td><code>HorizontalPodAutoscaler</code> for agent pods; disabled by default</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Key Values</h2>
+  <pre><code># values.yaml — key settings with their defaults
+
+# Controller
+controller:
+  replicas: 1                    # Number of controller replicas (use 2 for HA)
+  image:
+    repository: ghcr.io/badskater/encodeswarmr-controller
+    tag: ""                      # Defaults to chart appVersion
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+  service:
+    http:
+      type: LoadBalancer          # ClusterIP | NodePort | LoadBalancer
+      port: 8080
+    grpc:
+      type: ClusterIP
+      port: 9443
+
+# Agent
+agent:
+  replicas: 2                    # Initial agent replica count
+  daemonSet: false               # Set true to run one agent per node
+  image:
+    repository: ghcr.io/badskater/encodeswarmr-agent
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  maxWorkers: 4                  # Concurrent encode chunks per agent pod
+  workDir: /var/tmp/encodeswarmr
+
+# Autoscaling (agents)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  # Custom metric: queue depth from controller Prometheus endpoint
+  customMetrics:
+    enabled: false
+    queueDepthTarget: 10
+
+# Persistent storage (shared media volume)
+persistence:
+  enabled: true
+  storageClass: ""               # Leave blank for cluster default
+  accessMode: ReadWriteMany      # Requires an RWX-capable storage class (NFS, EFS, Filestore)
+  size: 500Gi
+
+# PostgreSQL (sub-chart: Bitnami PostgreSQL)
+postgresql:
+  enabled: true                  # Set false to use an external DB
+  auth:
+    database: encodeswarmr
+    username: encodeswarmr
+    password: changeme           # Use --set or external secret in production
+  primary:
+    persistence:
+      size: 20Gi
+
+# External database (when postgresql.enabled=false)
+externalDatabase:
+  host: ""
+  port: 5432
+  database: encodeswarmr
+  username: encodeswarmr
+  password: ""
+  existingSecret: ""             # Use a pre-existing Kubernetes Secret
+
+# Ingress
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: &#123;&#125;
+  hosts:
+    - host: encode.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: encodeswarmr-tls
+      hosts:
+        - encode.example.com
+
+# mTLS certificates
+mtls:
+  autoGenerate: true             # Generate a CA and certs at install time
+  existingSecret: ""             # Name of pre-existing Secret with ca.crt, tls.crt, tls.key
+
+# Application settings
+config:
+  secretKey: ""                  # 32-byte random string; auto-generated if blank
+  logLevel: info
+
+# OIDC SSO (optional)
+oidc:
+  enabled: false
+  issuer: ""
+  clientId: ""
+  clientSecret: ""               # Use existingSecret instead in production
+  existingSecret: ""</code></pre>
+
+  <h2>HA Controller Setup</h2>
+  <pre><code>helm upgrade encodeswarmr encodeswarmr/encodeswarmr \
+  --namespace encodeswarmr \
+  --set controller.replicas=2 \
+  --set controller.podAntiAffinity=required</code></pre>
+
+  <h2>Upgrading</h2>
+  <pre><code>helm repo update
+helm upgrade encodeswarmr encodeswarmr/encodeswarmr \
+  --namespace encodeswarmr \
+  --reuse-values \
+  --set controller.image.tag=1.3.0 \
+  --set agent.image.tag=1.3.0</code></pre>
+
+  <h2>Uninstall</h2>
+  <pre><code>helm uninstall encodeswarmr --namespace encodeswarmr
+
+# Delete the namespace and PVCs (data will be lost)
+kubectl delete namespace encodeswarmr</code></pre>
+</DocsLayout>

@@ -1,0 +1,402 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Manual Deployment">
+  <h1>Manual Deployment</h1>
+  <p>
+    Step-by-step instructions for deploying EncodeSwarmr without an orchestration tool. For automated deployments,
+    see the <a href="/docs/ansible">Ansible</a> or <a href="/docs/terraform-aws">Terraform</a> guides.
+  </p>
+
+  <h2>Prerequisites</h2>
+
+  <h3>Controller Host Requirements</h3>
+  <table>
+    <thead>
+      <tr><th>Resource</th><th>Minimum</th><th>Recommended</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OS</td><td>Ubuntu 22.04 / RHEL 9 / Rocky 9</td><td>Ubuntu 24.04 LTS</td></tr>
+      <tr><td>CPU</td><td>2 vCPU</td><td>4 vCPU</td></tr>
+      <tr><td>RAM</td><td>4 GB</td><td>8 GB</td></tr>
+      <tr><td>Disk</td><td>20 GB</td><td>50 GB SSD</td></tr>
+      <tr><td>Network</td><td>1 Gbps</td><td>10 Gbps</td></tr>
+      <tr><td>Ports</td><td colspan="2">8080/tcp (HTTP), 9443/tcp (gRPC/mTLS)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Agent Host Requirements</h3>
+  <table>
+    <thead>
+      <tr><th>Resource</th><th>Minimum</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OS</td><td>Windows 10/11, Server 2019/2022 or Ubuntu 22.04+</td><td>Windows preferred for x265/x264</td></tr>
+      <tr><td>CPU</td><td>4 cores</td><td>More cores = more parallel encode chunks</td></tr>
+      <tr><td>RAM</td><td>8 GB</td><td>16 GB recommended for 4K work</td></tr>
+      <tr><td>Disk (temp)</td><td>50 GB free</td><td>For chunk working files; SSD strongly recommended</td></tr>
+      <tr><td>Network</td><td>1 Gbps</td><td>Must reach Controller port 9443 and shared storage</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Shared Storage</h3>
+  <p>
+    All agents and the controller must have access to a shared network path for source media and encode output.
+    On Windows agents this is typically a UNC path (<code>\\nas\media</code>); on Linux it is an NFS/SMB mount
+    (<code>/mnt/media</code>). Configure path mappings in the Controller UI after deployment.
+  </p>
+
+  <h3>Agent Tool Requirements</h3>
+  <table>
+    <thead>
+      <tr><th>Tool</th><th>Minimum Version</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>FFmpeg</td><td>6.1+</td><td>Required on all agents; used for muxing, audio, and container operations</td></tr>
+      <tr><td>x265</td><td>3.5+</td><td>HEVC encoder; Windows agents typically only</td></tr>
+      <tr><td>x264</td><td>r3100+</td><td>H.264 encoder</td></tr>
+      <tr><td>SVT-AV1</td><td>1.8+</td><td>AV1 encoder; Linux agents recommended</td></tr>
+      <tr><td>AviSynth+</td><td>3.7.3+</td><td>Windows only; required for script-based filtering</td></tr>
+      <tr><td>VapourSynth</td><td>R65+</td><td>Cross-platform; required for VS-based filtering pipelines</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Recommended Tool Layout</h3>
+  <p>On Windows agents, place tools in a consistent directory and add to the system <code>PATH</code>:</p>
+  <pre><code>C:\Encode\Tools\
+  ffmpeg\bin\ffmpeg.exe
+  x265\x265.exe
+  x264\x264.exe
+  svt-av1\SvtAv1EncApp.exe
+  AviSynth+\         (installed via MSI)
+  VapourSynth\       (installed via installer)</code></pre>
+
+  <h3>Verification Commands</h3>
+  <pre><code># PowerShell — verify all tools are available on PATH
+@('ffmpeg','x265','x264','SvtAv1EncApp','vspipe') | ForEach-Object &#123;
+    $cmd = Get-Command $_ -ErrorAction SilentlyContinue
+    if ($cmd) &#123; Write-Host "OK  $_  ($($cmd.Source))" &#125;
+    else       &#123; Write-Warning "MISSING: $_" &#125;
+&#125;</code></pre>
+
+  <h3>PostgreSQL Requirements</h3>
+  <p>
+    PostgreSQL 15 or 16 is required. The controller creates its schema automatically on first start.
+    The database user requires <code>CREATEDB</code> or the database must be pre-created with the
+    user granted all privileges.
+  </p>
+  <pre><code>-- Create database and user
+CREATE USER encodeswarmr WITH PASSWORD 'changeme';
+CREATE DATABASE encodeswarmr OWNER encodeswarmr;
+GRANT ALL PRIVILEGES ON DATABASE encodeswarmr TO encodeswarmr;</code></pre>
+
+  <h2>Controller Deployment</h2>
+
+  <h3>Environment File</h3>
+  <p>Create <code>/etc/encodeswarmr/controller.env</code> (or <code>.env</code> next to the binary):</p>
+  <pre><code># Database
+DE_DB_HOST=localhost
+DE_DB_PORT=5432
+DE_DB_NAME=encodeswarmr
+DE_DB_USER=encodeswarmr
+DE_DB_PASSWORD=changeme
+DE_DB_SSLMODE=disable
+
+# HTTP / gRPC listeners
+DE_HTTP_ADDR=0.0.0.0:8080
+DE_GRPC_ADDR=0.0.0.0:9443
+
+# TLS — paths to certificates (see TLS section below)
+DE_TLS_CA_CERT=/etc/encodeswarmr/certs/ca.crt
+DE_TLS_SERVER_CERT=/etc/encodeswarmr/certs/server.crt
+DE_TLS_SERVER_KEY=/etc/encodeswarmr/certs/server.key
+
+# Secrets
+DE_SECRET_KEY=replace-with-32-byte-random-string
+
+# Optional: OIDC SSO
+# DE_OIDC_ISSUER=https://accounts.google.com
+# DE_OIDC_CLIENT_ID=your-client-id
+# DE_OIDC_CLIENT_SECRET=your-client-secret
+
+# Optional: SMTP email notifications
+# DE_SMTP_HOST=smtp.example.com
+# DE_SMTP_PORT=587
+# DE_SMTP_USER=user@example.com
+# DE_SMTP_PASSWORD=password
+# DE_SMTP_FROM=noreply@example.com
+
+# Optional: S3-compatible cloud storage
+# DE_S3_ENDPOINT=https://s3.amazonaws.com
+# DE_S3_BUCKET=my-encode-bucket
+# DE_S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+# DE_S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+# Logging
+DE_LOG_LEVEL=info
+DE_LOG_FORMAT=json</code></pre>
+
+  <h3>TLS Certificate Setup</h3>
+  <p>EncodeSwarmr uses mutual TLS (mTLS) between the controller and all agents. Generate a self-signed CA and certificates:</p>
+  <pre><code>mkdir -p /etc/encodeswarmr/certs
+cd /etc/encodeswarmr/certs
+
+# 1. Generate CA key and self-signed certificate (10-year validity)
+openssl genrsa -out ca.key 4096
+openssl req -new -x509 -days 3650 -key ca.key -out ca.crt \
+  -subj "/CN=EncodeSwarmr CA/O=EncodeSwarmr"
+
+# 2. Generate controller server certificate
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr \
+  -subj "/CN=encodeswarmr-controller/O=EncodeSwarmr"
+openssl x509 -req -days 3650 -in server.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out server.crt \
+  -extfile <(printf "subjectAltName=DNS:localhost,DNS:controller,IP:127.0.0.1,IP:$(hostname -I | awk '&#123;print $1&#125;')")
+
+# 3. Generate agent client certificate (deployed to each agent)
+openssl genrsa -out agent.key 2048
+openssl req -new -key agent.key -out agent.csr \
+  -subj "/CN=encodeswarmr-agent/O=EncodeSwarmr"
+openssl x509 -req -days 3650 -in agent.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out agent.crt
+
+# Set permissions
+chmod 600 *.key
+chmod 644 *.crt</code></pre>
+  <p>Copy <code>ca.crt</code>, <code>agent.crt</code>, and <code>agent.key</code> to each agent host.</p>
+
+  <h3>Docker Compose Launch</h3>
+  <p>The fastest way to run the controller is via Docker Compose. Bootstrap scripts are provided for common distributions.</p>
+
+  <h4>Debian / Ubuntu Bootstrap</h4>
+  <pre><code>#!/bin/bash
+# bootstrap-debian.sh — run as root
+set -euo pipefail
+
+# Install Docker
+apt-get update
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo $VERSION_CODENAME) stable" \
+  | tee /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+systemctl enable --now docker
+
+# Clone and start EncodeSwarmr
+git clone https://github.com/badskater/encodeswarmr.git /opt/encodeswarmr
+cd /opt/encodeswarmr
+cp .env.example .env
+# Edit .env before proceeding
+docker compose up -d</code></pre>
+
+  <h4>RHEL / Rocky Bootstrap</h4>
+  <pre><code>#!/bin/bash
+# bootstrap-rhel.sh — run as root
+set -euo pipefail
+
+# Install Docker
+dnf -y install dnf-plugins-core
+dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+systemctl enable --now docker
+
+# SELinux: allow containers to access NFS mounts
+setsebool -P container_use_nfs 1
+
+git clone https://github.com/badskater/encodeswarmr.git /opt/encodeswarmr
+cd /opt/encodeswarmr
+cp .env.example .env
+# Edit .env before proceeding
+docker compose up -d</code></pre>
+
+  <h4>Manual Docker Compose Start</h4>
+  <pre><code>cd /opt/encodeswarmr
+
+# Pull latest images
+docker compose pull
+
+# Start in foreground (for testing)
+docker compose up
+
+# Start as daemon
+docker compose up -d
+
+# View logs
+docker compose logs -f controller</code></pre>
+
+  <h3>Bare-Metal: Debian / Ubuntu</h3>
+
+  <h4>Install via .deb Package</h4>
+  <pre><code># Download the latest release
+RELEASE=$(curl -s https://api.github.com/repos/badskater/encodeswarmr/releases/latest \
+  | grep tag_name | cut -d'"' -f4)
+
+curl -LO "https://github.com/badskater/encodeswarmr/releases/download/$&#123;RELEASE&#125;/\
+encodeswarmr-controller_$&#123;RELEASE#v&#125;_amd64.deb"
+
+sudo dpkg -i encodeswarmr-controller_$&#123;RELEASE#v&#125;_amd64.deb
+
+# Copy your environment file
+sudo cp controller.env /etc/encodeswarmr/controller.env
+
+# Enable and start
+sudo systemctl enable --now encodeswarmr-controller</code></pre>
+
+  <h4>Manual Install (no package manager)</h4>
+  <pre><code># Extract binary
+tar -xzf encodeswarmr-controller_linux_amd64.tar.gz
+sudo cp encodeswarmr-controller /usr/local/bin/
+sudo chmod +x /usr/local/bin/encodeswarmr-controller
+
+# Create systemd unit
+sudo tee /etc/systemd/system/encodeswarmr-controller.service &lt;&lt;'EOF'
+[Unit]
+Description=EncodeSwarmr Controller
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=encodeswarmr
+EnvironmentFile=/etc/encodeswarmr/controller.env
+ExecStart=/usr/local/bin/encodeswarmr-controller
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo useradd -r -s /sbin/nologin encodeswarmr
+sudo mkdir -p /etc/encodeswarmr/certs
+sudo chown -R encodeswarmr: /etc/encodeswarmr
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now encodeswarmr-controller</code></pre>
+
+  <h3>Bare-Metal: RHEL / Rocky</h3>
+
+  <h4>Install via .rpm Package</h4>
+  <pre><code>RELEASE=$(curl -s https://api.github.com/repos/badskater/encodeswarmr/releases/latest \
+  | grep tag_name | cut -d'"' -f4)
+
+curl -LO "https://github.com/badskater/encodeswarmr/releases/download/$&#123;RELEASE&#125;/\
+encodeswarmr-controller-$&#123;RELEASE#v&#125;.x86_64.rpm"
+
+sudo rpm -i encodeswarmr-controller-$&#123;RELEASE#v&#125;.x86_64.rpm
+
+sudo cp controller.env /etc/encodeswarmr/controller.env
+sudo systemctl enable --now encodeswarmr-controller</code></pre>
+
+  <h4>Manual Install with SELinux Note</h4>
+  <pre><code>sudo cp encodeswarmr-controller /usr/local/bin/
+sudo chmod +x /usr/local/bin/encodeswarmr-controller
+
+# Restore SELinux context on the binary
+sudo restorecon -v /usr/local/bin/encodeswarmr-controller
+
+# Allow the service to bind to ports 8080 and 9443
+sudo semanage port -a -t http_port_t -p tcp 9443
+
+# Create unit file (same as Debian example above)
+# ...
+sudo systemctl daemon-reload
+sudo systemctl enable --now encodeswarmr-controller</code></pre>
+
+  <h3>Initial Configuration via Web UI</h3>
+  <p>After starting the controller for the first time, complete the setup wizard at <code>http://&lt;controller-ip&gt;:8080</code>:</p>
+  <ol>
+    <li><strong>Admin account</strong>: Set username, email, and password for the first administrator</li>
+    <li><strong>System name</strong>: Display name used in notifications and the UI header</li>
+    <li><strong>Storage paths</strong>: Configure the source media root and output root paths as seen from the controller host</li>
+    <li><strong>Path mappings</strong>: Add UNC → Linux translations for mixed-OS environments (e.g., <code>\\nas\media</code> → <code>/mnt/media</code>)</li>
+    <li><strong>Enrollment token</strong>: Generate the first agent enrollment token</li>
+    <li><strong>Notifications</strong> (optional): Configure SMTP or webhook endpoints</li>
+    <li><strong>OIDC SSO</strong> (optional): Enter your identity provider details</li>
+  </ol>
+
+  <h3>Agent Approval</h3>
+  <p>After agents connect for the first time they appear in a pending state and must be approved.</p>
+
+  <h4>Via Web UI</h4>
+  <p>Navigate to <strong>Agents</strong> in the sidebar. Pending agents show a yellow badge. Click <strong>Approve</strong> on each agent you want to activate.</p>
+
+  <h4>Via CLI / API</h4>
+  <pre><code># List pending agents
+curl -H "Authorization: Bearer $TOKEN" \
+  https://controller:8080/api/v1/agents?status=pending
+
+# Approve a specific agent
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://controller:8080/api/v1/agents/&#123;agent-id&#125;/approve</code></pre>
+
+  <h2>Agent Deployment</h2>
+
+  <h3>Directory Structure</h3>
+  <pre><code># Windows
+C:\ProgramData\EncodeSwarmr\
+  agent.yml          ← agent configuration
+  certs\
+    ca.crt
+    agent.crt
+    agent.key
+  logs\
+    agent.log
+  journal\           ← SQLite result buffer (auto-created)
+
+# Linux
+/etc/encodeswarmr/
+  agent.yml
+  certs/
+    ca.crt
+    agent.crt
+    agent.key
+/var/log/encodeswarmr/
+/var/lib/encodeswarmr/journal/</code></pre>
+
+  <h3>Agent Configuration YAML</h3>
+  <pre><code># agent.yml
+controller:
+  address: "controller.example.com:9443"
+  tls:
+    ca_cert: "/etc/encodeswarmr/certs/ca.crt"
+    client_cert: "/etc/encodeswarmr/certs/agent.crt"
+    client_key: "/etc/encodeswarmr/certs/agent.key"
+
+agent:
+  name: ""               # Leave blank to use hostname
+  enrollment_token: ""   # Set on first registration; cleared after approval
+
+  # Concurrency — how many encode chunks to run simultaneously
+  max_workers: 4
+
+  # Paths visible from this agent
+  # Used to translate controller paths to local paths
+  path_mappings:
+    - controller_path: "/mnt/media"
+      local_path: "\\\\nas\\media"    # Windows UNC
+
+  # Temp directory for chunk working files
+  work_dir: "C:\\EncodeTmp"           # Windows
+  # work_dir: "/var/tmp/encodeswarmr" # Linux
+
+  # Tool overrides (if not on PATH)
+  tools:
+    ffmpeg: ""       # e.g. "C:\\Encode\\Tools\\ffmpeg\\bin\\ffmpeg.exe"
+    x265: ""
+    x264: ""
+    svt_av1: ""
+    vspipe: ""
+
+logging:
+  level: "info"
+  file: ""           # Leave blank for stdout / Windows Event Log</code></pre>
+</DocsLayout>

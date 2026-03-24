@@ -1,0 +1,108 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Cost & Time Estimation">
+  <h1>Cost &amp; Time Estimation</h1>
+  <p>
+    Before submitting a job, you can request a cost and time estimate from the Controller. The estimate is based on historical encoding statistics gathered from previous jobs that used the same template and similar source characteristics.
+  </p>
+
+  <h2>API: POST /api/v1/estimate</h2>
+  <p>Request an estimate by providing the source file metadata and template:</p>
+
+  <h3>Request</h3>
+  <pre><code>POST /api/v1/estimate
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+&#123;
+  "source_duration_seconds": 3600,
+  "source_size_bytes": 15728640000,
+  "source_codec": "h264",
+  "source_resolution": "1920x1080",
+  "template_id": "hevc-4k-hdr"
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>source_duration_seconds</code></td><td>float</td><td>Yes</td><td>Duration of the source material in seconds</td></tr>
+      <tr><td><code>source_size_bytes</code></td><td>int</td><td>No</td><td>File size of the source in bytes; improves bitrate-based estimates</td></tr>
+      <tr><td><code>source_codec</code></td><td>string</td><td>No</td><td>Source video codec (e.g. <code>h264</code>, <code>vp9</code>, <code>prores</code>)</td></tr>
+      <tr><td><code>source_resolution</code></td><td>string</td><td>No</td><td>Source resolution as <code>WxH</code> (e.g. <code>1920x1080</code>)</td></tr>
+      <tr><td><code>template_id</code></td><td>string</td><td>Yes</td><td>ID of the encoding template to use for the estimate</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Response</h3>
+  <pre><code># Response 200 OK:
+&#123;
+  "estimated_duration_seconds": 2340,
+  "estimated_cost_credits": 47.2,
+  "confidence": "high",
+  "based_on_samples": 83,
+  "template_id": "hevc-4k-hdr",
+  "notes": "Estimate based on 83 completed jobs with similar source characteristics."
+&#125;</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>estimated_duration_seconds</code></td><td>int</td><td>Predicted wall-clock encoding time in seconds</td></tr>
+      <tr><td><code>estimated_cost_credits</code></td><td>float</td><td>Predicted cost in EncodeSwarmr credits (if billing is configured)</td></tr>
+      <tr><td><code>confidence</code></td><td>string</td><td>Confidence level: <code>high</code>, <code>medium</code>, <code>low</code>, or <code>none</code></td></tr>
+      <tr><td><code>based_on_samples</code></td><td>int</td><td>Number of historical job samples used to generate the estimate</td></tr>
+      <tr><td><code>template_id</code></td><td>string</td><td>The template the estimate was computed for</td></tr>
+      <tr><td><code>notes</code></td><td>string</td><td>Human-readable explanation of the confidence level or any caveats</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Confidence Levels</h2>
+  <table>
+    <thead>
+      <tr><th>Level</th><th>Sample Threshold</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>high</strong></td><td>≥ 50 samples</td><td>Strong historical data for this template and source characteristics; estimate is reliable within ±15%</td></tr>
+      <tr><td><strong>medium</strong></td><td>10–49 samples</td><td>Moderate historical data; estimate may vary by ±30%</td></tr>
+      <tr><td><strong>low</strong></td><td>1–9 samples</td><td>Limited data; treat the estimate as a rough guide only</td></tr>
+      <tr><td><strong>none</strong></td><td>0 samples</td><td>No historical data for this template; the Controller falls back to a formula-based estimate with no reliability guarantee</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Learning</h2>
+  <p>
+    Every time a job completes, the Controller updates the <code>encoding_stats</code> table with the actual encoding time, output size, and source characteristics. This data is used to improve future estimates for the same template.
+  </p>
+  <p>The <code>encoding_stats</code> table stores aggregated statistics per template and source resolution bucket:</p>
+  <pre><code>-- encoding_stats schema (simplified):
+CREATE TABLE encoding_stats (
+  template_id        TEXT NOT NULL,
+  source_resolution  TEXT NOT NULL,   -- bucketed, e.g. "1080p", "4K"
+  source_codec       TEXT,
+  sample_count       INTEGER NOT NULL DEFAULT 0,
+  avg_speed_ratio    REAL,            -- output seconds per wall-clock second
+  p50_speed_ratio    REAL,
+  p95_speed_ratio    REAL,
+  last_updated_at    TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (template_id, source_resolution, source_codec)
+);</code></pre>
+  <p>
+    The speed ratio (output seconds encoded per wall-clock second of encoding time) is the primary metric used to estimate duration. For example, a speed ratio of 1.5 means 1 second of wall-clock time encodes 1.5 seconds of output content.
+  </p>
+  <p>
+    Statistics are updated atomically after each successful job completion and are never updated for failed or preempted jobs, ensuring that only clean encoding runs contribute to the learning data.
+  </p>
+
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/docs/export">Job Export &amp; Archival</a> — Export job history and archive completed jobs</li>
+    <li><a href="/docs/validation">Output Validation</a> — Validate encoded output before marking jobs complete</li>
+    <li><a href="/docs/api">API Reference</a> — Full estimate endpoint documentation</li>
+  </ul>
+</DocsLayout>
