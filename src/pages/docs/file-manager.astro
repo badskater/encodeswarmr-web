@@ -1,0 +1,200 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="File Manager">
+  <h1>File Manager</h1>
+  <p>
+    Browse, inspect, move, delete, and download files from NAS mounts directly through the controller. The File Manager removes the need for a separate SFTP client or shell access for day-to-day media file operations.
+  </p>
+
+  <h2>Configuration</h2>
+  <p>
+    Access is restricted to an explicit allowlist of root paths. Configure the allowlist in the controller YAML file under the <code>file_manager</code> key.
+  </p>
+  <pre><code>file_manager:
+  allowed_paths:
+    - /mnt/nas/media
+    - /mnt/nas/output</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>allowed_paths</code></td>
+        <td>list of strings</td>
+        <td>Absolute paths the File Manager may access. Subdirectories are permitted automatically.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Security notes:</strong></p>
+  <ul>
+    <li>Any request targeting a path outside the allowlist returns <code>403 Forbidden</code>.</li>
+    <li>If <code>allowed_paths</code> is empty or the key is absent, all File Manager requests are rejected with <code>403 Forbidden</code>. The feature is effectively disabled until at least one path is configured.</li>
+    <li>Path traversal is prevented server-side using <code>filepath.Clean</code> before any allowlist check.</li>
+  </ul>
+
+  <h2>API</h2>
+
+  <h3>Browse a directory</h3>
+  <pre><code>GET /api/v1/files/browse?path=/mnt/nas/media</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Lists the contents of a directory. Returns the resolved path and an array of entries.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "path": "/mnt/nas/media",
+  "entries": [
+    &#123;
+      "name": "movie.mkv",
+      "path": "/mnt/nas/media/movie.mkv",
+      "is_dir": false,
+      "size": 8589934592,
+      "mod_time": "2026-03-20T14:32:00Z",
+      "ext": ".mkv",
+      "is_video": true
+    &#125;,
+    &#123;
+      "name": "archive",
+      "path": "/mnt/nas/media/archive",
+      "is_dir": true,
+      "size": 0,
+      "mod_time": "2026-01-15T09:00:00Z",
+      "ext": "",
+      "is_video": false
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h3>Get file info</h3>
+  <pre><code>GET /api/v1/files/info?path=/mnt/nas/media/movie.mkv</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>
+    Returns metadata for a single file. For video files (<code>is_video: true</code>), the response also includes a <code>codec_info</code> object populated from <code>ffprobe</code>, containing stream details such as codec name, resolution, frame rate, and duration.
+  </p>
+
+  <h3>Move a file</h3>
+  <pre><code>POST /api/v1/files/move</code></pre>
+  <p><strong>Required role:</strong> <code>operator</code></p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "source": "/mnt/nas/media/movie.mkv",
+  "destination": "/mnt/nas/output/movie.mkv"
+&#125;</code></pre>
+  <p>Both <code>source</code> and <code>destination</code> must resolve to paths within the configured <code>allowed_paths</code>. Returns <code>403 Forbidden</code> if either path is outside the allowlist.</p>
+
+  <h3>Delete a file</h3>
+  <pre><code>DELETE /api/v1/files/?path=/mnt/nas/media/file.mkv</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p>Deletes a single file. Directories cannot be deleted through this endpoint. Returns <code>400 Bad Request</code> if the path resolves to a directory, and <code>403 Forbidden</code> if the path is outside the allowlist.</p>
+
+  <h3>Download a file</h3>
+  <pre><code>GET /api/v1/files/download?path=/mnt/nas/media/movie.mkv</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Streams the file with a <code>Content-Disposition: attachment</code> header so browsers trigger a download prompt. Large files are streamed in chunks; the full file is not buffered in controller memory.</p>
+
+  <h2>FileEntry fields</h2>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>name</code></td>
+        <td>string</td>
+        <td>Filename (basename only).</td>
+      </tr>
+      <tr>
+        <td><code>path</code></td>
+        <td>string</td>
+        <td>Full absolute path to the entry.</td>
+      </tr>
+      <tr>
+        <td><code>is_dir</code></td>
+        <td>bool</td>
+        <td><code>true</code> if the entry is a directory.</td>
+      </tr>
+      <tr>
+        <td><code>size</code></td>
+        <td>int64</td>
+        <td>File size in bytes. <code>0</code> for directories.</td>
+      </tr>
+      <tr>
+        <td><code>mod_time</code></td>
+        <td>string (ISO 8601)</td>
+        <td>Last modification timestamp.</td>
+      </tr>
+      <tr>
+        <td><code>ext</code></td>
+        <td>string</td>
+        <td>File extension including the leading dot (e.g. <code>.mkv</code>). Empty for directories.</td>
+      </tr>
+      <tr>
+        <td><code>is_video</code></td>
+        <td>bool</td>
+        <td><code>true</code> when the extension matches a known video format (see below).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Video file extensions</h3>
+  <p>The following extensions are recognised as video files: <code>.mkv</code>, <code>.mp4</code>, <code>.mov</code>, <code>.avi</code>, <code>.ts</code>, <code>.m2ts</code>, <code>.mts</code>, <code>.wmv</code>, <code>.flv</code>, <code>.webm</code>, <code>.hevc</code>, <code>.m4v</code></p>
+
+  <h2>Security</h2>
+  <table>
+    <thead>
+      <tr><th>Protection</th><th>Mechanism</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Path allowlisting</td>
+        <td>Every request path is checked against <code>allowed_paths</code> after cleaning.</td>
+      </tr>
+      <tr>
+        <td>Path traversal</td>
+        <td><code>filepath.Clean</code> collapses <code>..</code> sequences before the allowlist check; traversal attempts return <code>403</code>.</td>
+      </tr>
+      <tr>
+        <td>Directory deletion</td>
+        <td>The <code>DELETE</code> endpoint rejects directories; only individual files may be deleted.</td>
+      </tr>
+      <tr>
+        <td>Role enforcement</td>
+        <td>Delete requires <code>admin</code>; move requires <code>operator</code>; browse/info/download require <code>viewer</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Example curl commands</h2>
+  <p><strong>Browse a directory:</strong></p>
+  <pre><code>curl -s "https://encodeswarmr.example.com/api/v1/files/browse?path=/mnt/nas/media" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <p><strong>Move a file:</strong></p>
+  <pre><code>curl -s -X POST https://encodeswarmr.example.com/api/v1/files/move \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"source": "/mnt/nas/media/raw.mkv", "destination": "/mnt/nas/output/raw.mkv"&#125;'</code></pre>
+
+  <p><strong>Download a file:</strong></p>
+  <pre><code>curl -OJ "https://encodeswarmr.example.com/api/v1/files/download?path=/mnt/nas/media/movie.mkv" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>The <strong>File Manager</strong> is accessible from the main navigation sidebar:</p>
+  <ol>
+    <li>The left panel shows a collapsible directory tree rooted at each configured <code>allowed_paths</code> entry. Click any folder to expand it.</li>
+    <li>The right panel lists the contents of the selected directory as a table with name, size, last modified date, and codec info for video files.</li>
+    <li>
+      <strong>Actions</strong> are available via the row action menu (⋯):
+      <ul>
+        <li><strong>Move</strong> — opens a path picker pre-filtered to <code>allowed_paths</code>.</li>
+        <li><strong>Delete</strong> — shows a confirmation dialog before sending the <code>DELETE</code> request.</li>
+        <li><strong>Download</strong> — triggers a browser download via the stream endpoint.</li>
+        <li><strong>Create Source</strong> — registers the file as a new Source in EncodeSwarmr and navigates to the source detail page.</li>
+      </ul>
+    </li>
+  </ol>
+</DocsLayout>

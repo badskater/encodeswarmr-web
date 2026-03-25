@@ -1,0 +1,191 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Encoding Profiles">
+  <h1>Encoding Profiles</h1>
+  <p>
+    Encoding profiles are user-defined presets that store codec settings, container format, and audio configuration. Unlike encoding presets — which are built-in, read-only templates bundled with the system — encoding profiles are fully managed via the API and UI. Profiles are available system-wide; any user with sufficient role can reference a profile when creating a job.
+  </p>
+
+  <h2>Profile fields</h2>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>id</code></td>
+        <td>string (UUID)</td>
+        <td>auto</td>
+        <td>—</td>
+        <td>Unique identifier assigned on creation.</td>
+      </tr>
+      <tr>
+        <td><code>name</code></td>
+        <td>string</td>
+        <td>yes</td>
+        <td>—</td>
+        <td>Human-readable profile name.</td>
+      </tr>
+      <tr>
+        <td><code>description</code></td>
+        <td>string</td>
+        <td>no</td>
+        <td><code>""</code></td>
+        <td>Optional free-text description.</td>
+      </tr>
+      <tr>
+        <td><code>container</code></td>
+        <td>string</td>
+        <td>no</td>
+        <td><code>"mkv"</code></td>
+        <td>Output container format, e.g. <code>mkv</code>, <code>mp4</code>.</td>
+      </tr>
+      <tr>
+        <td><code>settings</code></td>
+        <td>JSON object</td>
+        <td>no</td>
+        <td><code>&#123;&#125;</code></td>
+        <td>Codec and encoder settings (template_id, extra_vars, etc.).</td>
+      </tr>
+      <tr>
+        <td><code>audio_config</code></td>
+        <td>JSON object</td>
+        <td>no</td>
+        <td><code>null</code></td>
+        <td>Audio encoding settings.</td>
+      </tr>
+      <tr>
+        <td><code>created_by</code></td>
+        <td>string</td>
+        <td>auto</td>
+        <td>—</td>
+        <td>Username of the user who created the profile, taken from the session.</td>
+      </tr>
+      <tr>
+        <td><code>created_at</code></td>
+        <td>timestamp</td>
+        <td>auto</td>
+        <td>—</td>
+        <td>Creation time (UTC).</td>
+      </tr>
+      <tr>
+        <td><code>updated_at</code></td>
+        <td>timestamp</td>
+        <td>auto</td>
+        <td>—</td>
+        <td>Last update time (UTC).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>API</h2>
+  <p>All responses are wrapped in a <code>&#123;"data": &#123;...&#125;&#125;</code> envelope.</p>
+
+  <h3>List all profiles</h3>
+  <pre><code>GET /api/v1/encoding-profiles</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "data": [
+    &#123;
+      "id": "ep_abc123",
+      "name": "H.265 High Quality",
+      "description": "x265 slow preset, HDR passthrough",
+      "container": "mkv",
+      "settings": &#123;"template_id": "x265-hdr", "crf": 18&#125;,
+      "audio_config": &#123;"codec": "eac3", "bitrate": "640k"&#125;,
+      "created_by": "alice",
+      "created_at": "2026-01-15T10:00:00Z",
+      "updated_at": "2026-01-15T10:00:00Z"
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h3>Get a profile by ID</h3>
+  <pre><code>GET /api/v1/encoding-profiles/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns <code>404 Not Found</code> when the ID does not exist.</p>
+
+  <h3>Create a profile</h3>
+  <pre><code>POST /api/v1/encoding-profiles</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "name": "H.265 High Quality",
+  "description": "x265 slow preset with HDR passthrough",
+  "container": "mkv",
+  "settings": &#123;
+    "template_id": "x265-hdr",
+    "crf": 18,
+    "preset": "slow"
+  &#125;,
+  "audio_config": &#123;
+    "codec": "eac3",
+    "bitrate": "640k"
+  &#125;
+&#125;</code></pre>
+  <p><code>name</code> is required. <code>container</code> defaults to <code>"mkv"</code> when omitted. <code>settings</code> defaults to <code>&#123;&#125;</code> when omitted.</p>
+  <p><strong>Response:</strong> <code>201 Created</code> with the created profile wrapped in <code>&#123;"data": &#123;...&#125;&#125;</code>.</p>
+  <p><strong>Example:</strong></p>
+  <pre><code>curl -s -X POST https://controller.example.com/api/v1/encoding-profiles \
+  -H "Cookie: session=&lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "name": "H.265 High Quality",
+    "description": "x265 slow preset with HDR passthrough",
+    "container": "mkv",
+    "settings": &#123;"template_id": "x265-hdr", "crf": 18, "preset": "slow"&#125;,
+    "audio_config": &#123;"codec": "eac3", "bitrate": "640k"&#125;
+  &#125;'</code></pre>
+
+  <h3>Update a profile</h3>
+  <pre><code>PUT /api/v1/encoding-profiles/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p>
+    The request body follows the same structure as the create body. <code>name</code> is required. All other fields replace the stored values — omitted JSON fields are not merged, they are replaced with their zero values.
+  </p>
+  <p><strong>Response:</strong> <code>200 OK</code> with the updated profile.</p>
+  <p>Returns <code>404 Not Found</code> when the ID does not exist.</p>
+
+  <h3>Delete a profile</h3>
+  <pre><code>DELETE /api/v1/encoding-profiles/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Response:</strong> <code>200 OK</code> with <code>&#123;"data": &#123;"ok": true&#125;&#125;</code>.</p>
+  <p>Returns <code>404 Not Found</code> when the ID does not exist.</p>
+
+  <h2>Audit logging</h2>
+  <p>Create, update, and delete operations on encoding profiles are recorded in the audit log. The recorded actions are:</p>
+  <table>
+    <thead>
+      <tr><th>Action</th><th>Trigger</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>encoding_profile.create</code></td>
+        <td>Successful <code>POST /api/v1/encoding-profiles</code></td>
+      </tr>
+      <tr>
+        <td><code>encoding_profile.update</code></td>
+        <td>Successful <code>PUT /api/v1/encoding-profiles/&#123;id&#125;</code></td>
+      </tr>
+      <tr>
+        <td><code>encoding_profile.delete</code></td>
+        <td>Successful <code>DELETE /api/v1/encoding-profiles/&#123;id&#125;</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Each audit entry records the acting user, their username, IP address, and the profile ID as the resource identifier.</p>
+
+  <h2>UI walkthrough</h2>
+  <p>Encoding profiles are managed in the admin interface:</p>
+  <ol>
+    <li>Navigate to <strong>Admin → Encoding Profiles</strong>.</li>
+    <li>The table lists all profiles with name, container, and last-updated timestamp.</li>
+    <li>Click <strong>New Profile</strong> to open the creation form.</li>
+    <li>Fill in the name, description, container, and paste the settings JSON.</li>
+    <li>Click <strong>Save</strong>. The new profile appears in the table immediately.</li>
+    <li>Use the <strong>Edit</strong> and <strong>Delete</strong> buttons on each row to modify or remove profiles.</li>
+  </ol>
+</DocsLayout>

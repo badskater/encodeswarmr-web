@@ -1,0 +1,245 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Notification Channels">
+  <h1>Notification Channels</h1>
+  <p>
+    EncodeSwarmr supports four notification channels: Email (SMTP), Telegram, Pushover, and ntfy. See the Email Notifications page for full SMTP setup and per-user email preferences. This page covers the three push channels — Telegram, Pushover, and ntfy — and documents the admin test endpoints and per-user preference fields that apply to all channels.
+  </p>
+
+  <h2>Telegram</h2>
+  <p>
+    Telegram messages are delivered via the Bot API. You need a bot token from <a href="https://t.me/BotFather">@BotFather</a> and the target chat or channel ID.
+  </p>
+
+  <h3>Configuration</h3>
+  <pre><code>notifications:
+  telegram:
+    bot_token: "$&#123;TELEGRAM_BOT_TOKEN&#125;"   # from @BotFather — store in .env
+    chat_id: "-1001234567890"            # numeric chat ID or @username</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>notifications.telegram.bot_token</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Bot API token issued by @BotFather.</td>
+      </tr>
+      <tr>
+        <td><code>notifications.telegram.chat_id</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Target chat ID (numeric) or public @username.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>Security note:</strong> <code>bot_token</code> is sensitive. Store it in <code>.env</code> using environment variable substitution (<code>"$&#123;TELEGRAM_BOT_TOKEN&#125;"</code>) rather than hardcoding in the YAML file.
+  </p>
+  <p>The Telegram sender is disabled when either field is empty. Messages are sent with <code>parse_mode: HTML</code>.</p>
+
+  <h2>Pushover</h2>
+  <p>Pushover delivers push notifications to iOS, Android, and desktop devices.</p>
+
+  <h3>Configuration</h3>
+  <pre><code>notifications:
+  pushover:
+    app_token: "$&#123;PUSHOVER_APP_TOKEN&#125;"   # application API token — store in .env
+    user_key: "$&#123;PUSHOVER_USER_KEY&#125;"     # user or group key — store in .env</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>notifications.pushover.app_token</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Pushover application API token.</td>
+      </tr>
+      <tr>
+        <td><code>notifications.pushover.user_key</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Pushover user or group key.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>Security note:</strong> Both <code>app_token</code> and <code>user_key</code> are sensitive credentials. Store them in <code>.env</code> and never commit them to version control.
+  </p>
+  <p>The Pushover sender is disabled when either field is empty.</p>
+
+  <h2>ntfy</h2>
+  <p>ntfy supports both the public hosted service at <code>https://ntfy.sh</code> and self-hosted deployments. An optional Bearer token enables delivery to private topics.</p>
+
+  <h3>Configuration</h3>
+  <pre><code>notifications:
+  ntfy:
+    topic: "encodeswarmr-alerts"
+    server_url: "https://ntfy.sh"        # optional; defaults to https://ntfy.sh
+    token: "$&#123;NTFY_TOKEN&#125;"               # optional; required for private topics</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>notifications.ntfy.topic</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>ntfy topic name to publish to. Required to enable ntfy.</td>
+      </tr>
+      <tr>
+        <td><code>notifications.ntfy.server_url</code></td>
+        <td>string</td>
+        <td><code>https://ntfy.sh</code></td>
+        <td>Base URL of the ntfy server. Override for self-hosted instances.</td>
+      </tr>
+      <tr>
+        <td><code>notifications.ntfy.token</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Optional Bearer token for private topics. Store in <code>.env</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>Security note:</strong> If <code>token</code> is set, it is sent as a <code>Bearer</code> <code>Authorization</code> header. Treat it as a secret and store it in <code>.env</code>.
+  </p>
+  <p>The ntfy sender is disabled when <code>topic</code> is empty.</p>
+
+  <h2>Test endpoints</h2>
+  <p>All test endpoints require the <code>admin</code> role. They send a test message using the configured channel and return a standard response or an error.</p>
+
+  <h3>Test email</h3>
+  <pre><code>POST /api/v1/notifications/test-email</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;"to": "user@example.com"&#125;</code></pre>
+  <p><strong>Response (success):</strong></p>
+  <pre><code>&#123;"data": &#123;"ok": true, "to": "user@example.com"&#125;&#125;</code></pre>
+  <pre><code>curl -s -X POST https://controller.example.com/api/v1/notifications/test-email \
+  -H "Cookie: session=&lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"to": "user@example.com"&#125;'</code></pre>
+  <p>Returns <code>503 Service Unavailable</code> when SMTP is not configured, or <code>502 Bad Gateway</code> when delivery fails.</p>
+
+  <h3>Test Telegram</h3>
+  <pre><code>POST /api/v1/notifications/test-telegram</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong> none required</p>
+  <p><strong>Response (success):</strong></p>
+  <pre><code>&#123;"data": &#123;"ok": true&#125;&#125;</code></pre>
+  <pre><code>curl -s -X POST https://controller.example.com/api/v1/notifications/test-telegram \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+  <p>Returns <code>503 Service Unavailable</code> when Telegram is not configured, or <code>502 Bad Gateway</code> when delivery fails.</p>
+
+  <h3>Test Pushover</h3>
+  <pre><code>POST /api/v1/notifications/test-pushover</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong> none required</p>
+  <p><strong>Response (success):</strong></p>
+  <pre><code>&#123;"data": &#123;"ok": true&#125;&#125;</code></pre>
+  <pre><code>curl -s -X POST https://controller.example.com/api/v1/notifications/test-pushover \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+  <p>Returns <code>503 Service Unavailable</code> when Pushover is not configured, or <code>502 Bad Gateway</code> when delivery fails.</p>
+
+  <h3>Test ntfy</h3>
+  <pre><code>POST /api/v1/notifications/test-ntfy</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong> none required</p>
+  <p><strong>Response (success):</strong></p>
+  <pre><code>&#123;"data": &#123;"ok": true&#125;&#125;</code></pre>
+  <pre><code>curl -s -X POST https://controller.example.com/api/v1/notifications/test-ntfy \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+  <p>Returns <code>503 Service Unavailable</code> when ntfy is not configured, or <code>502 Bad Gateway</code> when delivery fails.</p>
+
+  <h2>Per-user notification preferences</h2>
+  <p>Each user controls which events trigger notifications. Preferences are scoped to the authenticated user.</p>
+
+  <h3>Get preferences</h3>
+  <pre><code>GET /api/v1/me/notifications</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code> (own preferences only)</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "user_id": "usr_abc123",
+  "notify_on_job_complete": true,
+  "notify_on_job_failed": true,
+  "notify_on_agent_stale": false,
+  "notify_email": false,
+  "email_address": "",
+  "webhook_filter_user_only": false
+&#125;</code></pre>
+
+  <h3>Update preferences</h3>
+  <pre><code>PUT /api/v1/me/notifications</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code> (own preferences only)</p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "notify_on_job_complete": true,
+  "notify_on_job_failed": true,
+  "notify_on_agent_stale": true,
+  "notify_email": true,
+  "email_address": "user@example.com",
+  "webhook_filter_user_only": false
+&#125;</code></pre>
+  <p>The response returns the saved preferences.</p>
+
+  <h3>Preference fields</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>notify_on_job_complete</code></td>
+        <td><code>true</code></td>
+        <td>Send a notification when a job reaches <code>completed</code> status.</td>
+      </tr>
+      <tr>
+        <td><code>notify_on_job_failed</code></td>
+        <td><code>true</code></td>
+        <td>Send a notification when a job reaches <code>failed</code> status.</td>
+      </tr>
+      <tr>
+        <td><code>notify_on_agent_stale</code></td>
+        <td><code>false</code></td>
+        <td>Send a notification when an agent's heartbeat exceeds the stale threshold.</td>
+      </tr>
+      <tr>
+        <td><code>notify_email</code></td>
+        <td><code>false</code></td>
+        <td>Enable per-user email delivery in addition to push channels.</td>
+      </tr>
+      <tr>
+        <td><code>email_address</code></td>
+        <td><code>""</code></td>
+        <td>Override email address for this user. Falls back to the SMTP <code>from</code> address when empty.</td>
+      </tr>
+      <tr>
+        <td><code>webhook_filter_user_only</code></td>
+        <td><code>false</code></td>
+        <td>When <code>true</code>, webhook-triggered channel notifications (Discord, Teams, Slack) are filtered to jobs created by this user only. Has no effect on push channels.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>UI walkthrough</h2>
+  <p>Users manage their notification preferences from the <strong>Profile</strong> page:</p>
+  <ol>
+    <li>Click the avatar in the top-right corner and select <strong>Profile</strong>.</li>
+    <li>Navigate to the <strong>Notifications</strong> tab.</li>
+    <li>Toggle the switches for <strong>Job completed</strong>, <strong>Job failed</strong>, and <strong>Agent offline</strong>.</li>
+    <li>Optionally enable <strong>Email notifications</strong> and enter an override address.</li>
+    <li>Click <strong>Save preferences</strong>. A confirmation toast appears.</li>
+  </ol>
+  <p>Admins can test each channel using the <strong>Send test message</strong> buttons visible on the same page when the corresponding channel is configured.</p>
+</DocsLayout>

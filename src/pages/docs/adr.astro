@@ -23,6 +23,15 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><td>ADR-008</td><td>Controller-Side Concat Task</td><td>Accepted</td></tr>
       <tr><td>ADR-009</td><td>Template Starter Library and Variable Reference</td><td>Accepted</td></tr>
       <tr><td>ADR-010</td><td>Job Chaining and Chain Groups</td><td>Accepted</td></tr>
+      <tr><td>ADR-011</td><td>Watch Folders and Encoding Rules Engine</td><td>Accepted</td></tr>
+      <tr><td>ADR-012</td><td>Encoding Profiles vs Templates</td><td>Accepted</td></tr>
+      <tr><td>ADR-013</td><td>Notification Channels and User Preferences</td><td>Accepted</td></tr>
+      <tr><td>ADR-014</td><td>Per-API-Key Rate Limiting</td><td>Accepted</td></tr>
+      <tr><td>ADR-015</td><td>Agent Update Channels</td><td>Accepted</td></tr>
+      <tr><td>ADR-016</td><td>Source Thumbnail Generation and Serving</td><td>Accepted</td></tr>
+      <tr><td>ADR-017</td><td>Audit Logging and Compliance Export</td><td>Accepted</td></tr>
+      <tr><td>ADR-018</td><td>Agent Health and Deep-Dive Monitoring</td><td>Accepted</td></tr>
+      <tr><td>ADR-019</td><td>File Manager and Path Security Model</td><td>Accepted</td></tr>
     </tbody>
   </table>
 
@@ -54,11 +63,35 @@ positive outcomes and trade-offs or risks introduced.
   <p><strong>Decision:</strong> Implement both the controller and agent in Go. Go's standard library, goroutines, and single-binary compilation model are a strong fit for this use case.</p>
   <p><strong>Consequences:</strong> Single-binary deployment with no runtime dependency. Fast compilation and cross-compilation for Windows and Linux targets. Team must be proficient in Go.</p>
 
+  <h2>ADR-002: Database: PostgreSQL</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The controller needs durable state for jobs, tasks, agents, users, webhooks, templates, variables, audit logs, and scheduling. Options considered: SQLite (single-file, no network access), MySQL (limited JSONB, older tooling), PostgreSQL (mature, feature-rich, HA-capable). The schema makes heavy use of JSONB for flexible metadata and requires reliable concurrent writers.</p>
+  <p><strong>Decision:</strong> Use PostgreSQL 16+ with <code>pgx/v5</code> connection pooling. Schema is versioned via <code>golang-migrate</code> with plain <code>.sql</code> files embedded in the binary. Optional Patroni + pgBouncer HA cluster for production deployments.</p>
+  <p><strong>Consequences:</strong> JSONB storage avoids premature schema lock-in. <code>SELECT ... FOR UPDATE</code> enables safe concurrent task claiming. Patroni provides automatic failover. PostgreSQL adds operational complexity compared to SQLite and requires a separate container or managed service.</p>
+
   <h2>ADR-003: Agent Communication: gRPC + mTLS</h2>
   <p><strong>Status:</strong> Accepted</p>
   <p><strong>Context:</strong> Agents run on remote machines, potentially across untrusted networks. The communication protocol needs to be efficient for streaming progress updates and must authenticate both ends without requiring an external identity provider.</p>
   <p><strong>Decision:</strong> Use gRPC over TLS with mutual authentication (mTLS). The Controller runs a built-in certificate authority and issues a unique certificate to each agent at enrolment time. Agents present their certificate on every connection.</p>
   <p><strong>Consequences:</strong> Strong security with no shared secrets. Certificate rotation is a manual process today; automated rotation is planned (see Roadmap). The gRPC binary framing is more efficient than REST for high-frequency progress streaming.</p>
+
+  <h2>ADR-004: Split Platform: Windows Agents, Linux Controller</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> Video encoding tools (x265, x264, SVT-AV1, AviSynth+, VapourSynth, NVENC) have the best support and performance on Windows, particularly for GPU-accelerated encodes. However, container orchestration, PostgreSQL, and long-running service management are better suited to Linux.</p>
+  <p><strong>Decision:</strong> Agents run as Windows Services on Windows Server hosts using the <code>golang.org/x/sys/windows/svc</code> package. The controller runs on Ubuntu 22.04+ or in Docker (Linux amd64). UNC paths (<code>\\NAS01\media</code>) are used for source files on the agent side; the controller accesses the same NAS via NFS mounts using path mapping translations stored in the <code>path_mappings</code> table.</p>
+  <p><strong>Consequences:</strong> Access to the full Windows GPU encode ecosystem and battle-tested GPU driver support. Requires maintaining two deployment targets; NAS path mapping logic adds complexity.</p>
+
+  <h2>ADR-005: Server-Side Script Generation</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> Each encoding task requires an AviSynth (.avs) or VapourSynth (.vpy) frameserver script, a batch file (.bat) that invokes the encoder, and optional audio conversion scripts. Scripts must be parameterised with source path, output path, chunk boundaries, and global variables. Two strategies were considered: agent-side generation using templates downloaded at task-claim time, or controller-side generation with scripts written to a shared NAS path.</p>
+  <p><strong>Decision:</strong> Generate all scripts on the controller using the template engine (<code>internal/controller/engine</code>). Templates are stored in the <code>templates</code> table and rendered with Go's <code>text/template</code>. Generated files are written to a NAS path. Agents receive only the script directory path via the gRPC <code>TaskAssignment</code> message.</p>
+  <p><strong>Consequences:</strong> Centralised template versioning, consistent script output, easy audit of generated scripts. Controller requires write access to the NAS. If the NAS share is unavailable, script generation blocks task dispatch.</p>
+
+  <h2>ADR-006: Agent Offline Resilience: SQLite Journal</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> Encoding jobs can run for hours. If the network link between an agent and the controller drops mid-encode, the agent must continue working and not lose the result. On reconnect, completed task data must be replayed to the controller without duplication.</p>
+  <p><strong>Decision:</strong> Agents maintain a local SQLite journal using the pure-Go <code>modernc.org/sqlite</code> driver (no CGO). On reconnect the agent calls <code>SyncOfflineResults</code> gRPC to replay buffered results. The controller deduplicates by task ID before applying updates.</p>
+  <p><strong>Consequences:</strong> Resilient to network outages of arbitrary duration. No data loss on agent restart. Pure-Go driver keeps cross-compilation simple. SQLite introduces a second database technology; the journal schema must be kept in sync with <code>CompleteTask</code> fields.</p>
 
   <h2>ADR-007: Chunk Encoding Architecture</h2>
   <p><strong>Status:</strong> Accepted</p>
@@ -71,4 +104,70 @@ positive outcomes and trade-offs or risks introduced.
   <p><strong>Context:</strong> After chunk encoding completes, the encoded segments must be merged into a single output file. This concatenation step needs to be reliable and not require agent-side coordination.</p>
   <p><strong>Decision:</strong> The Controller generates and dispatches a dedicated concat task after all chunk tasks complete. The concat task runs ffmpeg on a single agent to merge the segments.</p>
   <p><strong>Consequences:</strong> Concat is a first-class task with its own status, retry, and logging. Keeps agent logic simple. The concat agent must have access to all segment files on shared storage.</p>
+
+  <h2>ADR-009: Template Starter Library and Variable Reference</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The encoding template system uses Go <code>text/template</code> scripts stored in PostgreSQL. Users creating templates from a blank textarea had no guidance on available variables, encoder options, or how to structure scripts for chunked encoding. New users had to read source code to understand the template system.</p>
+  <p><strong>Decision:</strong> (1) A starter template library of 8 pre-built templates covering common scenarios (x265 quality/HDR10/Dolby Vision, x264 web, SVT-AV1, ffmpeg remux, AviSynth/VapourSynth frameservers). (2) A variable reference panel in the template editor showing all available variables by category. (3) Simplified job creation with two clear labeled dropdowns replacing the confusing auto-preset system.</p>
+  <p><strong>Consequences:</strong> Users can create working templates in seconds without reading source code. Starter templates demonstrate best practices. Starter templates are hardcoded in the frontend — adding new ones requires a code change.</p>
+
+  <h2>ADR-010: Job Chaining and Chain Groups</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> EncodeSwarmr previously supported only independent jobs. A complete encode pipeline (analyse → encode video → encode audio → mux) required the operator to manually submit and monitor each job in sequence. This manual orchestration is error-prone and does not scale for large libraries.</p>
+  <p><strong>Decision:</strong> Native job chaining was chosen over external orchestration. A <code>depends_on</code> field lists predecessor job IDs; when a job completes, the engine unblocks any downstream jobs with all dependencies satisfied. A <code>chain_group</code> label groups related jobs for batch querying. <code>POST /api/v1/job-chains</code> creates the entire pipeline atomically.</p>
+  <p><strong>Consequences:</strong> The common encode pipeline requires no external tooling. Pipeline state is visible in the existing Jobs UI. Failure propagation (cancelling downstream jobs when a dependency fails) is automatic. More complex controller code. No support for conditional pipeline branches.</p>
+
+  <h2>ADR-011: Watch Folders and Encoding Rules Engine</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> Operators previously had to manually register source files and manually choose templates for each job. For large media libraries with consistent naming and directory organisation, this is tedious and does not scale. A polling-based approach was chosen over filesystem watchers because it works over NAS protocols (SMB, NFS) without requiring agent-side components. A suggestion-only rules engine was chosen over auto-apply to prevent accidental misconfiguration.</p>
+  <p><strong>Decision:</strong> Watch folders are defined in the controller YAML with configurable scan intervals. Encoding rules are stored in the <code>encoding_rules</code> table with a JSONB <code>conditions</code> array and JSONB <code>actions</code> object. Rules are suggestion-only — operators always confirm before a job is created. A dry-run evaluate endpoint is provided.</p>
+  <p><strong>Consequences:</strong> No external tools or agent-side components required for source detection. Suggestion-only rules prevent accidental misconfiguration. Polling adds detection latency bounded by <code>poll_interval</code>. Runtime enable/disable of watch folders is ephemeral and reverts on restart.</p>
+
+  <h2>ADR-012: Encoding Profiles vs Templates</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The system has script templates that define how encoding is performed at the script level. Users also need a way to store reusable encoding configurations (codec settings, container format, audio config) without modifying templates directly. Merging settings into templates was considered but conflates code with data.</p>
+  <p><strong>Decision:</strong> A separate <code>encoding_profiles</code> table was introduced. Templates are code (admin-managed, version-controlled). Profiles are data (user-configurable, reusable across templates). Presets are built-in read-only defaults that ship with the controller binary. Full CRUD is exposed at <code>/api/v1/encoding-profiles</code>.</p>
+  <p><strong>Consequences:</strong> Clean separation between code and data. Profiles are reusable across templates, reducing duplication. Three concepts (templates, profiles, presets) must be understood by operators. No validation of settings JSON against encoder capabilities — invalid settings surface only at encode time.</p>
+
+  <h2>ADR-013: Notification Channels and User Preferences</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The system previously supported only global webhook notifications and SMTP email. All events were broadcast to all destinations; individual users had no control over which events they received. Push notification services commonly used in self-hosted environments (Telegram, Pushover, ntfy) were not supported.</p>
+  <p><strong>Decision:</strong> Per-user preferences are stored in a <code>notification_prefs</code> table. Four notification channel implementations are provided: <code>EmailSender</code> (SMTP), <code>TelegramSender</code>, <code>PushoverSender</code>, and <code>NtfySender</code>. Admin test endpoints allow operators to verify channel configuration without waiting for a real event.</p>
+  <p><strong>Consequences:</strong> Users control their own notification noise level with per-event granularity. Four channels cover the most common self-hosted push notification services. Each additional channel requires separate credential configuration. Delivery is fire-and-forget per channel with no unified retry or delivery receipt.</p>
+
+  <h2>ADR-014: Per-API-Key Rate Limiting</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The system previously applied a single global rate limit per source IP. All clients sharing an IP competed for the same bucket. A high-traffic integration using an API key could exhaust the bucket and starve other clients, and there was no mechanism to constrain a specific API key to a lower limit.</p>
+  <p><strong>Decision:</strong> An optional <code>rate_limit</code> field was added to the <code>api_keys</code> table. When set to a positive value, the middleware creates a dedicated token bucket for that key. When zero (the default), the request falls through to the existing global per-IP limit. Both limits run in parallel; the more restrictive applies. <code>PUT /api/v1/api-keys/&#123;id&#125;/rate-limit</code> (admin only) sets the per-minute limit.</p>
+  <p><strong>Consequences:</strong> Admins can throttle specific integrations without affecting other clients. Default of zero means no behaviour change for existing keys — entirely opt-in. Two parallel rate limiting systems add complexity. Per-key token buckets consume memory proportional to active API keys with custom limits, mitigated by 10-minute idle eviction.</p>
+
+  <h2>ADR-015: Agent Update Channels</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> All agents previously received the same binary update. There was no way to test new agent versions on a subset of agents before rolling out to the full fleet. Operators had to manually distribute binaries or accept the risk of fleet-wide regressions from a bad release.</p>
+  <p><strong>Decision:</strong> A three-tier channel system was chosen. Agents are assigned to a channel (stable, beta, or nightly). The controller serves the latest binary per channel. Agents poll their assigned channel's endpoint and self-update when a newer version is available. Channel assignment is persisted in the database and survives agent restarts.</p>
+  <p><strong>Consequences:</strong> Staged rollouts allow validating new versions on beta agents before promoting to stable. No automatic promotion from beta to stable — version management across channels is manual. Nightly builds may be unstable; operators must understand the risk before assigning production agents to that channel.</p>
+
+  <h2>ADR-016: Source Thumbnail Generation and Serving</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The source list displayed only filenames and metadata. Operators managing large libraries had no visual way to identify sources without opening each one individually. On-demand generation was considered but is slow and adds ffmpeg latency to every web request.</p>
+  <p><strong>Decision:</strong> Pre-generate thumbnails during analysis and store them on disk. After analysis completes, the controller generates a 5×1 tile strip and individual frames at 10%, 25%, 50%, 75%, and 90% of video duration using ffmpeg. Relative paths are stored in a <code>thumbnails</code> JSONB column on the source record. Thumbnails are served via a static file endpoint with path traversal protection.</p>
+  <p><strong>Consequences:</strong> Instant thumbnail display at view time. Visual source identification dramatically improves library management UX. Disk storage overhead of approximately 500 KB–2 MB per source. Thumbnails are orphaned if a source is deleted. Requires ffmpeg on the controller host.</p>
+
+  <h2>ADR-017: Audit Logging and Compliance Export</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> There was no record of who performed what actions in the system. When investigating incidents or satisfying compliance requirements, operators had no way to trace mutations back to a specific user or time. Application-level logging was considered but is hard to query and provides no export format suitable for compliance tooling.</p>
+  <p><strong>Decision:</strong> A dedicated <code>audit_log</code> table stores structured entries for every significant user-initiated mutation. Action names follow the <code>resource.verb</code> convention (e.g., <code>encoding_profile.create</code>). A paginated read API and CSV/JSON export endpoint are provided. Per-user activity is available via <code>GET /api/v1/users/&#123;id&#125;/activity</code>.</p>
+  <p><strong>Consequences:</strong> Full traceability of user-initiated mutations. CSV/JSON export integrates with compliance tools and spreadsheets. The audit table grows unbounded without operator-managed retention. Read-only operations are excluded by design — the log is mutations-only.</p>
+
+  <h2>ADR-018: Agent Health and Deep-Dive Monitoring</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The agent list showed only basic status and last heartbeat timestamp. Operators had no visibility into encoding performance, task history, or resource utilisation per agent. Relying solely on external Prometheus/Grafana monitoring requires context-switching away from the EncodeSwarmr UI to diagnose individual agents.</p>
+  <p><strong>Decision:</strong> The controller computes encoding statistics from completed task records and exposes them alongside agent details. Three endpoints provide layered health visibility: <code>GET /api/v1/agents/&#123;id&#125;/health</code> (stats + agent record), <code>GET /api/v1/agents/&#123;id&#125;/recent-tasks</code> (task history), and <code>GET /api/v1/agents/&#123;id&#125;/metrics</code> (time-series metric snapshots).</p>
+  <p><strong>Consequences:</strong> Operators can diagnose agent issues directly from the EncodeSwarmr UI without switching to Grafana. Task history enables pattern detection across codec types and content. Stats computed on-read from task history may be slow for agents with thousands of completed tasks. Metric snapshot storage grows with agent count multiplied by metric collection frequency.</p>
+
+  <h2>ADR-019: File Manager and Path Security Model</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> Operators needed to browse, move, rename, and delete files on NAS mounts without requiring SSH access to the controller host. Exposing filesystem operations through a web API introduces significant security risks: path traversal attacks, unauthorised access to system files, and accidental deletion. An unrestricted file API was rejected as too dangerous.</p>
+  <p><strong>Decision:</strong> An allowlisted file manager was implemented. Only paths within explicitly configured base directories (<code>file_manager.allowed_paths</code>) are accessible. All operations validate the requested path against the allowlist before any filesystem operation. Five endpoints are provided: browse, info, move, delete, and download. Directory deletion is not supported via the API. The subdirectory check requires the path to begin with the base path followed by a path separator to prevent prefix confusion.</p>
+  <p><strong>Consequences:</strong> Operators can manage NAS files from the web UI without SSH access. Path allowlisting prevents access to system files or storage mounts not explicitly permitted. Symlink traversal is not resolved — a symlink inside an allowed directory could point outside it. Directory deletion is intentionally not supported and requires SSH.</p>
 </DocsLayout>

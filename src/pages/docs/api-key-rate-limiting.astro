@@ -1,0 +1,144 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="API Key Rate Limiting">
+  <h1>Per-API-Key Rate Limiting</h1>
+  <p>
+    Override global rate limits on a per-key basis for automation, CI/CD pipelines, or restricted third-party access. Each API key can carry its own request budget, allowing high-throughput automation accounts and low-trust integrations to coexist on the same controller.
+  </p>
+
+  <h2>How It Works</h2>
+
+  <h3>Global defaults</h3>
+  <p>The controller applies a token-bucket limiter per client IP address with the following defaults:</p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Value</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Rate</td><td>200 requests / second</td></tr>
+      <tr><td>Burst</td><td>400 requests</td></tr>
+      <tr><td>Eviction (idle buckets)</td><td>10 minutes</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Per-key limits</h3>
+  <p>Each API key has a <code>rate_limit</code> field that expresses a request budget in <strong>requests per minute</strong>.</p>
+  <ul>
+    <li><code>rate_limit: 0</code> — the key inherits the global per-IP default.</li>
+    <li><code>rate_limit: N</code> (N &gt; 0) — the key is granted its own token bucket at N requests per minute.</li>
+  </ul>
+  <p>
+    When a request authenticates with a Bearer token, the middleware resolves the key record and checks for a custom limit before falling back to the IP-based limiter. Per-IP limiting continues to apply in parallel; the more restrictive of the two limits governs the request.
+  </p>
+  <p>Idle rate-limit buckets are evicted from memory after 10 minutes of inactivity to prevent unbounded growth.</p>
+
+  <h3>Limit precedence</h3>
+  <pre><code>request arrives
+  └─ Bearer token present?
+       ├─ yes → look up key → rate_limit &gt; 0?
+       │           ├─ yes → apply per-key bucket
+       │           └─ no  → apply global per-IP bucket
+       └─ no  → apply global per-IP bucket
+  (per-IP bucket always checked in parallel)</code></pre>
+
+  <h2>Database</h2>
+  <p>Migration <strong>035</strong> adds a <code>rate_limit</code> column to the <code>api_keys</code> table:</p>
+  <pre><code>ALTER TABLE api_keys ADD COLUMN rate_limit INT NOT NULL DEFAULT 0;</code></pre>
+  <p>A value of <code>0</code> means "use the global default." The column is never negative; a <code>CHECK (rate_limit &gt;= 0)</code> constraint is enforced at the database level.</p>
+
+  <h2>API</h2>
+
+  <h3>Create an API key</h3>
+  <pre><code>POST /api/v1/api-keys</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code> (own keys only)</p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "name": "ci-bot"
+&#125;</code></pre>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "id": "key_abc123",
+  "user_id": "usr_xyz789",
+  "name": "ci-bot",
+  "key": "esk_live_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "created_at": "2026-03-24T10:00:00Z",
+  "expires_at": null
+&#125;</code></pre>
+  <p>The plaintext key is returned <strong>once</strong> at creation time and is never stored or retrievable again. Store it securely immediately.</p>
+
+  <h3>List API keys</h3>
+  <pre><code>GET /api/v1/api-keys</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code> (own keys only)</p>
+  <p>Returns all keys belonging to the authenticated user. The response does not include the plaintext key or its hash.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>[
+  &#123;
+    "id": "key_abc123",
+    "user_id": "usr_xyz789",
+    "name": "ci-bot",
+    "rate_limit": 50,
+    "created_at": "2026-03-24T10:00:00Z",
+    "expires_at": null
+  &#125;
+]</code></pre>
+
+  <h3>Delete an API key</h3>
+  <pre><code>DELETE /api/v1/api-keys/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code> (own keys only)</p>
+  <p>Ownership is verified server-side; users cannot delete keys belonging to other accounts. Returns <code>204 No Content</code> on success.</p>
+
+  <h3>Set a per-key rate limit</h3>
+  <pre><code>PUT /api/v1/api-keys/&#123;id&#125;/rate-limit</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "rate_limit": 50
+&#125;</code></pre>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Constraints</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>rate_limit</code></td>
+        <td>int</td>
+        <td><code>&gt;= 0</code></td>
+        <td>Requests per minute. <code>0</code> restores the global default.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response:</strong> <code>200 OK</code> with the updated key record (no plaintext key).</p>
+  <p>Returns <code>400 Bad Request</code> if <code>rate_limit</code> is negative.</p>
+
+  <h2>Example: create a key and apply a custom limit</h2>
+  <p><strong>Step 1 — create the key:</strong></p>
+  <pre><code>curl -s -X POST https://encodeswarmr.example.com/api/v1/api-keys \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"name": "ci-bot"&#125;' | tee ci-bot-key.json</code></pre>
+  <p>Save the <code>key</code> value from the response — it will not be shown again.</p>
+
+  <p><strong>Step 2 — apply a rate limit (admin):</strong></p>
+  <pre><code>KEY_ID=$(jq -r .id ci-bot-key.json)
+
+curl -s -X PUT "https://encodeswarmr.example.com/api/v1/api-keys/$&#123;KEY_ID&#125;/rate-limit" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"rate_limit": 50&#125;'</code></pre>
+
+  <p><strong>Step 3 — use the key:</strong></p>
+  <pre><code>curl -s https://encodeswarmr.example.com/api/v1/jobs \
+  -H "Authorization: Bearer esk_live_xxxxxxxxxxxxxxxxxxxxxxxx"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>API key management is available from the <strong>Profile</strong> page (top-right avatar → Profile):</p>
+  <ol>
+    <li>Navigate to <strong>Profile → API Keys</strong>.</li>
+    <li>Click <strong>New API Key</strong>, enter a name, and click <strong>Create</strong>.</li>
+    <li>Copy the displayed key immediately — it is shown only once.</li>
+    <li>Admins can click the <strong>⋯</strong> menu on any key row and select <strong>Set Rate Limit</strong> to open the rate-limit dialog.</li>
+    <li>Enter a value in requests per minute (<code>0</code> to restore the global default) and click <strong>Save</strong>.</li>
+  </ol>
+</DocsLayout>

@@ -1,0 +1,218 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Encoding Rules">
+  <h1>Encoding Rules</h1>
+  <p>
+    Encoding rules auto-suggest templates, audio codecs, priority, and tags based on source properties. Rules are evaluated when a job is created and produce a <strong>suggestion</strong> — the user always confirms before anything is applied.
+  </p>
+
+  <h2>How it works</h2>
+  <ol>
+    <li>Admin creates rules with conditions (e.g., resolution is 4K, HDR type is HDR10) and actions (suggest a specific template, set priority).</li>
+    <li>Rules are ordered by priority (lower number = higher priority). The first matching rule wins.</li>
+    <li>When a user creates a job, the rules engine evaluates the source's properties against all enabled rules.</li>
+    <li>If a rule matches, the suggested template, audio codec, priority, and tags are pre-filled in the job creation form.</li>
+    <li>The user reviews and confirms — rules never auto-create jobs.</li>
+  </ol>
+
+  <h2>Rule structure</h2>
+
+  <h3>Conditions</h3>
+  <p>Each rule has one or more conditions. <strong>All</strong> conditions must match for the rule to fire (AND logic).</p>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>field</code></td>
+        <td>string</td>
+        <td>Source property to match against.</td>
+      </tr>
+      <tr>
+        <td><code>operator</code></td>
+        <td>string</td>
+        <td>Comparison operator.</td>
+      </tr>
+      <tr>
+        <td><code>value</code></td>
+        <td>string</td>
+        <td>Value to compare. For <code>in</code>, use comma-separated values.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Available fields:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Example values</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>resolution</code></td><td><code>3840x2160</code>, <code>1920x1080</code></td></tr>
+      <tr><td><code>hdr_type</code></td><td><code>hdr10</code>, <code>hdr10+</code>, <code>dolby_vision</code>, <code>hlg</code>, <code>""</code> (SDR)</td></tr>
+      <tr><td><code>codec</code></td><td><code>hevc</code>, <code>h264</code>, <code>av1</code></td></tr>
+      <tr><td><code>file_size_gb</code></td><td><code>45.2</code></td></tr>
+      <tr><td><code>duration_min</code></td><td><code>120.5</code></td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Operators:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Operator</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>eq</code></td><td>Equals (case-insensitive)</td></tr>
+      <tr><td><code>neq</code></td><td>Not equals</td></tr>
+      <tr><td><code>contains</code></td><td>Substring match (case-insensitive)</td></tr>
+      <tr><td><code>in</code></td><td>Comma-separated list match</td></tr>
+      <tr><td><code>gt</code></td><td>Greater than (numeric)</td></tr>
+      <tr><td><code>lt</code></td><td>Less than (numeric)</td></tr>
+      <tr><td><code>gte</code></td><td>Greater than or equal (numeric)</td></tr>
+      <tr><td><code>lte</code></td><td>Less than or equal (numeric)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Actions</h3>
+  <p>When a rule matches, its action describes what to suggest:</p>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>suggest_template_id</code></td>
+        <td>string</td>
+        <td>Template UUID to pre-select.</td>
+      </tr>
+      <tr>
+        <td><code>suggest_audio_codec</code></td>
+        <td>string</td>
+        <td>Audio codec to suggest (e.g. <code>aac</code>, <code>opus</code>, <code>copy</code>).</td>
+      </tr>
+      <tr>
+        <td><code>suggest_priority</code></td>
+        <td>int</td>
+        <td>Job priority to suggest.</td>
+      </tr>
+      <tr>
+        <td><code>suggest_tags</code></td>
+        <td>string[]</td>
+        <td>Tags to apply to the job.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>API</h2>
+  <p>Encoding rules endpoints require the <strong>viewer</strong> role for read operations and the <strong>admin</strong> role for write operations.</p>
+
+  <h3>List rules</h3>
+  <pre><code>GET /api/v1/encoding-rules</code></pre>
+  <p>Returns all rules ordered by priority, then name.</p>
+  <pre><code>curl -s -b cookies.txt http://localhost:8080/api/v1/encoding-rules</code></pre>
+
+  <h3>Get a rule</h3>
+  <pre><code>GET /api/v1/encoding-rules/&#123;id&#125;</code></pre>
+
+  <h3>Create a rule</h3>
+  <pre><code>POST /api/v1/encoding-rules</code></pre>
+  <p><strong>Required role:</strong> admin</p>
+  <pre><code>curl -s -b cookies.txt -X POST http://localhost:8080/api/v1/encoding-rules \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "name": "4K HDR → x265 Quality",
+    "priority": 10,
+    "conditions": [
+      &#123;"field": "resolution", "operator": "eq", "value": "3840x2160"&#125;,
+      &#123;"field": "hdr_type", "operator": "in", "value": "hdr10,hdr10+,dolby_vision"&#125;
+    ],
+    "actions": &#123;
+      "suggest_template_id": "&lt;template-uuid&gt;",
+      "suggest_audio_codec": "copy",
+      "suggest_priority": 75,
+      "suggest_tags": ["4k", "hdr"]
+    &#125;,
+    "enabled": true
+  &#125;'</code></pre>
+  <p><strong>Response:</strong> <code>201 Created</code> with the full rule object.</p>
+
+  <h3>Update a rule</h3>
+  <pre><code>PUT /api/v1/encoding-rules/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> admin. <code>name</code> is required. Returns <code>404</code> if not found.</p>
+
+  <h3>Delete a rule</h3>
+  <pre><code>DELETE /api/v1/encoding-rules/&#123;id&#125;</code></pre>
+  <p><strong>Required role:</strong> admin. Returns <code>204 No Content</code> on success, <code>404</code> if not found.</p>
+
+  <h3>Evaluate rules (dry run)</h3>
+  <pre><code>POST /api/v1/encoding-rules/evaluate</code></pre>
+  <p>Read-only endpoint that evaluates rules against provided source properties and returns the suggested action without creating any jobs.</p>
+  <pre><code>curl -s -b cookies.txt -X POST http://localhost:8080/api/v1/encoding-rules/evaluate \
+  -H "Content-Type: application/json" \
+  -d '&#123;
+    "source_id": "&lt;uuid&gt;",
+    "resolution": "3840x2160",
+    "hdr_type": "hdr10",
+    "codec": "hevc",
+    "file_size_gb": 42.5,
+    "duration_min": 135.0
+  &#125;'</code></pre>
+  <p>If <code>source_id</code> is provided, missing fields are populated from the database automatically.</p>
+  <p><strong>Response (match):</strong></p>
+  <pre><code>&#123;
+  "data": &#123;
+    "matched": true,
+    "suggestion": &#123;
+      "suggest_template_id": "&lt;template-uuid&gt;",
+      "suggest_audio_codec": "copy",
+      "suggest_priority": 75,
+      "suggest_tags": ["4k", "hdr"]
+    &#125;
+  &#125;
+&#125;</code></pre>
+  <p><strong>Response (no match):</strong></p>
+  <pre><code>&#123;
+  "data": &#123;
+    "matched": false,
+    "suggestion": null
+  &#125;
+&#125;</code></pre>
+
+  <h2>Database</h2>
+  <p>Migration <code>030_watch_folders_rules</code> creates the <code>encoding_rules</code> table with JSONB columns for <code>conditions</code> and <code>actions</code>.</p>
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>UUID</td><td>Primary key.</td></tr>
+      <tr><td><code>name</code></td><td>VARCHAR</td><td>Human-readable rule name.</td></tr>
+      <tr><td><code>priority</code></td><td>INT</td><td>Evaluation order (lower = first).</td></tr>
+      <tr><td><code>conditions</code></td><td>JSONB</td><td>Array of condition objects.</td></tr>
+      <tr><td><code>actions</code></td><td>JSONB</td><td>Action object with suggestion fields.</td></tr>
+      <tr><td><code>enabled</code></td><td>BOOLEAN</td><td>Whether the rule is active.</td></tr>
+      <tr><td><code>created_at</code></td><td>TIMESTAMPTZ</td><td>Creation timestamp.</td></tr>
+      <tr><td><code>updated_at</code></td><td>TIMESTAMPTZ</td><td>Last update timestamp.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Example: multi-rule workflow</h2>
+  <pre><code>Rule 1 (priority 10): 4K HDR → x265 Quality template, priority 75
+Rule 2 (priority 20): 4K SDR → x265 Balanced template, priority 50
+Rule 3 (priority 30): 1080p → x265 Fast template, priority 25
+Rule 4 (priority 100): Fallback → x264 Compatible template, priority 10</code></pre>
+  <p>
+    When a 4K HDR10 source is evaluated, Rule 1 matches first and suggests the x265 Quality template at priority 75. The user sees this pre-filled in the job form and can accept or override.
+  </p>
+
+  <h2>UI</h2>
+  <p>Navigate to <strong>Admin → Encoding Rules</strong> to manage rules:</p>
+  <ul>
+    <li><strong>Rule list</strong> — sorted by priority, showing name, conditions summary, and enabled toggle.</li>
+    <li><strong>Create/Edit</strong> — form with name, priority, condition builder (add/remove rows), and action fields.</li>
+    <li><strong>Test</strong> — enter source properties or select a source to evaluate rules and see the suggestion.</li>
+  </ul>
+  <p>When creating a job from the Sources page, matched rule suggestions appear as a banner with a one-click "Apply suggestion" button.</p>
+</DocsLayout>

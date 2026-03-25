@@ -1,0 +1,210 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Audit Log">
+  <h1>Audit Log &amp; Export</h1>
+  <p>
+    The audit log tracks user actions across the system. Every create, update, delete, and approve action is recorded along with the acting user's identity, IP address, and a timestamp. The log is append-only and cannot be modified or deleted through the API.
+  </p>
+
+  <h2>Audit entry fields</h2>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>id</code></td>
+        <td>integer</td>
+        <td>Auto-incrementing entry ID.</td>
+      </tr>
+      <tr>
+        <td><code>user_id</code></td>
+        <td>string (nullable)</td>
+        <td>ID of the user who performed the action. Null for system-generated entries.</td>
+      </tr>
+      <tr>
+        <td><code>username</code></td>
+        <td>string</td>
+        <td>Username at the time of the action.</td>
+      </tr>
+      <tr>
+        <td><code>action</code></td>
+        <td>string</td>
+        <td>Dot-namespaced action identifier, e.g. <code>encoding_profile.create</code>.</td>
+      </tr>
+      <tr>
+        <td><code>resource</code></td>
+        <td>string</td>
+        <td>Resource type affected, e.g. <code>encoding_profile</code>, <code>agent</code>, <code>user</code>.</td>
+      </tr>
+      <tr>
+        <td><code>resource_id</code></td>
+        <td>string</td>
+        <td>ID of the specific resource affected.</td>
+      </tr>
+      <tr>
+        <td><code>detail</code></td>
+        <td>JSON object</td>
+        <td>Optional structured metadata about the action (varies by action type).</td>
+      </tr>
+      <tr>
+        <td><code>ip_address</code></td>
+        <td>string</td>
+        <td>IP address of the request that triggered the action.</td>
+      </tr>
+      <tr>
+        <td><code>logged_at</code></td>
+        <td>timestamp</td>
+        <td>UTC timestamp when the entry was written.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Tracked actions</h2>
+  <p>The following actions are recorded automatically:</p>
+  <table>
+    <thead>
+      <tr><th>Action</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>user.create</code></td>
+        <td>A new user account was created.</td>
+      </tr>
+      <tr>
+        <td><code>agent.approve</code></td>
+        <td>An agent's pending enrollment was approved.</td>
+      </tr>
+      <tr>
+        <td><code>encoding_profile.create</code></td>
+        <td>A new encoding profile was created.</td>
+      </tr>
+      <tr>
+        <td><code>encoding_profile.update</code></td>
+        <td>An existing encoding profile was updated.</td>
+      </tr>
+      <tr>
+        <td><code>encoding_profile.delete</code></td>
+        <td>An encoding profile was deleted.</td>
+      </tr>
+      <tr>
+        <td><code>job.create</code></td>
+        <td>A new encoding job was submitted.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Additional actions may be added by other parts of the system. The <code>action</code> field is always a dot-namespaced string identifying the resource type and operation.</p>
+
+  <h2>API</h2>
+
+  <h3>List audit log entries</h3>
+  <pre><code>GET /api/v1/audit-log?limit=100&amp;offset=0</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p>Returns a paginated list of audit entries ordered by <code>logged_at</code> descending (most recent first).</p>
+  <p><strong>Query parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Max</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>limit</code></td>
+        <td>integer</td>
+        <td><code>100</code></td>
+        <td><code>500</code></td>
+        <td>Number of entries per page.</td>
+      </tr>
+      <tr>
+        <td><code>offset</code></td>
+        <td>integer</td>
+        <td><code>0</code></td>
+        <td>—</td>
+        <td>Number of entries to skip.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response:</strong> Uses the standard <code>writeCollection</code> envelope with <code>meta.total_count</code>:</p>
+  <pre><code>&#123;
+  "data": [
+    &#123;
+      "id": 9821,
+      "user_id": "usr_abc123",
+      "username": "alice",
+      "action": "encoding_profile.create",
+      "resource": "encoding_profile",
+      "resource_id": "ep_xyz789",
+      "detail": null,
+      "ip_address": "10.0.1.42",
+      "logged_at": "2026-03-24T11:30:00Z"
+    &#125;
+  ],
+  "meta": &#123;
+    "total_count": 9821
+  &#125;
+&#125;</code></pre>
+  <p><strong>Example:</strong></p>
+  <pre><code>curl -s "https://controller.example.com/api/v1/audit-log?limit=50&amp;offset=0" \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+
+  <h3>Export audit log</h3>
+  <pre><code>GET /api/v1/audit-logs/export?format=json
+GET /api/v1/audit-logs/export?format=csv&amp;limit=5000</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p>Exports audit log entries as a downloadable file. The default format is <code>json</code>; pass <code>format=csv</code> for CSV output.</p>
+  <p><strong>Query parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>format</code></td>
+        <td>string</td>
+        <td><code>json</code></td>
+        <td>Output format: <code>json</code> or <code>csv</code>.</td>
+      </tr>
+      <tr>
+        <td><code>limit</code></td>
+        <td>integer</td>
+        <td><code>10000</code></td>
+        <td>Maximum number of entries to include in the export.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response headers (CSV):</strong></p>
+  <pre><code>Content-Type: text/csv
+Content-Disposition: attachment; filename="audit-log.csv"</code></pre>
+  <p><strong>Response headers (JSON):</strong></p>
+  <pre><code>Content-Type: application/json
+Content-Disposition: attachment; filename="audit-log.json"</code></pre>
+  <p>CSV columns: <code>id</code>, <code>user_id</code>, <code>username</code>, <code>action</code>, <code>resource</code>, <code>resource_id</code>, <code>ip_address</code>, <code>logged_at</code>.</p>
+  <p><strong>Example — export last 5000 entries as CSV:</strong></p>
+  <pre><code>curl -s "https://controller.example.com/api/v1/audit-logs/export?format=csv&amp;limit=5000" \
+  -H "Cookie: session=&lt;token&gt;" \
+  -o audit-log.csv</code></pre>
+  <p><strong>Example — full JSON export:</strong></p>
+  <pre><code>curl -s "https://controller.example.com/api/v1/audit-logs/export?format=json" \
+  -H "Cookie: session=&lt;token&gt;" \
+  -o audit-log.json</code></pre>
+
+  <h3>Per-user activity feed</h3>
+  <pre><code>GET /api/v1/users/&#123;id&#125;/activity?limit=100&amp;offset=0</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p>
+    Returns audit log entries filtered to a single user. Supports the same <code>limit</code> (max <code>500</code>) and <code>offset</code> parameters as the main list endpoint. Response uses the same <code>writeCollection</code> envelope with <code>meta.total_count</code>.
+  </p>
+  <p><strong>Example:</strong></p>
+  <pre><code>curl -s "https://controller.example.com/api/v1/users/usr_abc123/activity?limit=25" \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>The audit log is available in the admin interface:</p>
+  <ol>
+    <li>Navigate to <strong>Admin → Audit Log</strong>.</li>
+    <li>The table displays entries with columns for timestamp, username, action, resource, resource ID, and IP address.</li>
+    <li>Use the search and filter controls to narrow by user or action type.</li>
+    <li>Click <strong>Export JSON</strong> or <strong>Export CSV</strong> to download the current filtered view. The export respects any active filters and defaults to the last 10,000 entries.</li>
+  </ol>
+</DocsLayout>

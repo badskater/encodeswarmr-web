@@ -1,0 +1,113 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Agent Update Channels">
+  <h1>Agent Update Channels</h1>
+  <p>
+    Control which release channel each agent pulls binary updates from: stable, beta, or nightly. Channels let you roll out new agent versions to a subset of your fleet before promoting them to production.
+  </p>
+
+  <h2>Agent-side configuration</h2>
+  <p>Set the channel in the agent YAML configuration file:</p>
+  <pre><code>agent:
+  update_channel: "stable"  # stable | beta | nightly</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Channel</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>stable</code></td>
+        <td>Production-ready releases. Default for all new agents. Recommended for production workloads.</td>
+      </tr>
+      <tr>
+        <td><code>beta</code></td>
+        <td>Pre-release builds with upcoming features. May contain minor issues. Suitable for staging environments.</td>
+      </tr>
+      <tr>
+        <td><code>nightly</code></td>
+        <td>Latest development builds, cut automatically from the main branch. Intended for testing only; not recommended for production.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>The agent checks its assigned channel on each heartbeat cycle and downloads a new binary if a newer version is available on that channel.</p>
+
+  <h2>Database</h2>
+  <p>Migration <strong>034</strong> adds an <code>update_channel</code> column to the <code>agents</code> table:</p>
+  <pre><code>ALTER TABLE agents ADD COLUMN update_channel VARCHAR NOT NULL DEFAULT 'stable';</code></pre>
+  <p>The column defaults to <code>stable</code> for all existing agents at migration time. Valid values are <code>stable</code>, <code>beta</code>, and <code>nightly</code>; the API rejects other values with <code>400 Bad Request</code>.</p>
+
+  <h2>API</h2>
+
+  <h3>Change an agent's channel</h3>
+  <pre><code>PUT /api/v1/agents/&#123;id&#125;/channel</code></pre>
+  <p><strong>Required role:</strong> <code>admin</code></p>
+  <p><strong>Request body:</strong></p>
+  <pre><code>&#123;
+  "channel": "beta"
+&#125;</code></pre>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Allowed values</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>channel</code></td>
+        <td>string</td>
+        <td><code>stable</code>, <code>beta</code>, <code>nightly</code></td>
+        <td>The release channel to assign to this agent.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response:</strong> <code>200 OK</code> with the updated agent record, including the new <code>update_channel</code> value.</p>
+  <p>Returns <code>400 Bad Request</code> for unrecognised channel names and <code>404 Not Found</code> if the agent ID does not exist.</p>
+
+  <h3>List available channels</h3>
+  <pre><code>GET /api/v1/upgrade-channels</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns all available channels with the latest published version on each.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>[
+  &#123; "channel": "stable",  "latest_version": "1.14.0" &#125;,
+  &#123; "channel": "beta",    "latest_version": "1.15.0-beta.2" &#125;,
+  &#123; "channel": "nightly", "latest_version": "1.15.0-nightly.20260323" &#125;
+]</code></pre>
+
+  <h3>Check for the latest version on a channel</h3>
+  <pre><code>GET /api/v1/upgrades/latest?channel=beta</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns the latest available version for the specified channel. Useful for scripted pre-flight checks before changing an agent's channel.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "channel": "beta",
+  "latest_version": "1.15.0-beta.2",
+  "released_at": "2026-03-22T08:00:00Z"
+&#125;</code></pre>
+
+  <h2>Example curl commands</h2>
+  <p><strong>Assign an agent to the beta channel:</strong></p>
+  <pre><code>curl -s -X PUT "https://encodeswarmr.example.com/api/v1/agents/agt_abc123/channel" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"channel": "beta"&#125;'</code></pre>
+
+  <p><strong>List all channels and their latest versions:</strong></p>
+  <pre><code>curl -s https://encodeswarmr.example.com/api/v1/upgrade-channels \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <p><strong>Check for the latest nightly build:</strong></p>
+  <pre><code>curl -s "https://encodeswarmr.example.com/api/v1/upgrades/latest?channel=nightly" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>Channel management is available from the <strong>Agents</strong> section of the admin panel:</p>
+  <ol>
+    <li>Navigate to <strong>Admin → Agents</strong>.</li>
+    <li>Each agent row displays a channel badge (<code>stable</code>, <code>beta</code>, or <code>nightly</code>) next to the agent name.</li>
+    <li>Click an agent name to open the agent detail page.</li>
+    <li>Admins see a <strong>Channel</strong> dropdown on the detail page. Select a new channel and click <strong>Save</strong>. The change is written to the database immediately; the agent picks up the new channel on its next heartbeat.</li>
+    <li>Non-admin users can see the current channel but the dropdown is read-only.</li>
+  </ol>
+</DocsLayout>

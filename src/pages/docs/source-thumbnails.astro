@@ -1,0 +1,82 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Source Thumbnails">
+  <h1>Source Thumbnails</h1>
+  <p>
+    Auto-generated preview thumbnails for source video files, created automatically after analysis completes. Thumbnails give operators a quick visual reference without opening a media player or leaving the controller UI.
+  </p>
+
+  <h2>How It Works</h2>
+  <p>After the analysis phase finishes, the controller generates thumbnails using <code>ffmpeg</code>:</p>
+  <ul>
+    <li>A <strong>thumbnail strip</strong> is produced as a 5×1 tile grid, 320 px wide.</li>
+    <li><strong>Individual frames</strong> are captured at 10%, 25%, 50%, 75%, and 90% of the video's total duration.</li>
+  </ul>
+  <p>
+    Each source gets a subdirectory inside the configured <code>thumbnail_dir</code>, named by its UUID. The resulting file paths are saved as a JSONB array in the <code>thumbnails</code> column on the <code>sources</code> table.
+  </p>
+  <p><code>ffmpeg</code> must be installed and on the PATH of the controller host.</p>
+
+  <h2>Configuration</h2>
+  <pre><code>analysis:
+  thumbnail_dir: /var/lib/encodeswarmr/thumbnails</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>thumbnail_dir</code></td>
+        <td>string</td>
+        <td><code>/var/lib/encodeswarmr/thumbnails</code></td>
+        <td>Filesystem path where thumbnail files are stored. The controller must have write access to this directory.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Ensure the directory exists and is writable before starting the controller. If the directory is missing, thumbnail generation is skipped and a warning is logged.</p>
+
+  <h2>API</h2>
+
+  <h3>List thumbnails for a source</h3>
+  <pre><code>GET /api/v1/sources/&#123;id&#125;/thumbnails</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns the source UUID and an array of thumbnail URLs that can be used directly in <code>&lt;img&gt;</code> tags or download requests.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "source_id": "src_abc123",
+  "thumbnails": [
+    "/api/v1/thumbnails/src_abc123/thumb_001.jpg",
+    "/api/v1/thumbnails/src_abc123/thumb_002.jpg",
+    "/api/v1/thumbnails/src_abc123/thumb_003.jpg",
+    "/api/v1/thumbnails/src_abc123/thumb_004.jpg",
+    "/api/v1/thumbnails/src_abc123/thumb_005.jpg",
+    "/api/v1/thumbnails/src_abc123/strip.jpg"
+  ]
+&#125;</code></pre>
+  <p>Returns an empty <code>thumbnails</code> array if analysis has not yet completed or thumbnail generation was skipped.</p>
+
+  <h3>Serve a thumbnail image</h3>
+  <pre><code>GET /api/v1/thumbnails/&#123;path&#125;</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Streams the thumbnail file with a <code>Content-Type: image/jpeg</code> header. The first path segment must be a valid source UUID; requests that do not begin with a recognised UUID are rejected with <code>404 Not Found</code>.</p>
+  <p>Path traversal sequences (<code>..</code>) anywhere in the path are rejected with <code>400 Bad Request</code> before any filesystem access is attempted.</p>
+
+  <h2>Example: fetch thumbnail URLs</h2>
+  <pre><code>curl -s https://encodeswarmr.example.com/api/v1/sources/src_abc123/thumbnails \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <p><strong>Download the thumbnail strip directly:</strong></p>
+  <pre><code>curl -s "https://encodeswarmr.example.com/api/v1/thumbnails/src_abc123/strip.jpg" \
+  -H "Authorization: Bearer $TOKEN" \
+  -o strip.jpg</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>Thumbnails are displayed in two places:</p>
+  <ul>
+    <li><strong>Sources list</strong> — the first individual thumbnail (<code>thumb_001.jpg</code>) appears as a small preview icon next to the source filename. If no thumbnail exists, a placeholder icon is shown.</li>
+    <li><strong>Source detail page</strong> — the full thumbnail strip (<code>strip.jpg</code>) is displayed at the top of the detail view, giving a five-frame visual overview of the content. Clicking any frame opens the full-resolution image in a lightbox.</li>
+  </ul>
+</DocsLayout>

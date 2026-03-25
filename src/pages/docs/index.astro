@@ -36,6 +36,9 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><td><a href="/docs/presets">Encoding Presets</a></td><td>Create and manage codec settings and quality presets</td></tr>
       <tr><td><a href="/docs/adaptive-chunking">Adaptive Chunking</a></td><td>Split sources into segments and encode in parallel across agents</td></tr>
       <tr><td><a href="/docs/cloud-storage">Cloud Storage</a></td><td>Use S3, Azure Blob, or GCS for source and output files</td></tr>
+      <tr><td><a href="/docs/watch-folders">Watch Folders</a></td><td>Analysis-only hot folders that auto-detect new files</td></tr>
+      <tr><td><a href="/docs/encoding-rules">Encoding Rules</a></td><td>Auto-suggest templates based on source properties</td></tr>
+      <tr><td><a href="/docs/encoding-profiles">Encoding Profiles</a></td><td>Bundle template, audio, and output settings as a single selection</td></tr>
     </tbody>
   </table>
 
@@ -69,6 +72,33 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><td><a href="/docs/validation">Output Validation</a></td><td>VMAF and bitrate threshold checks after encoding</td></tr>
       <tr><td><a href="/docs/export">Job Export &amp; Archival</a></td><td>Archive completed jobs and outputs to cloud storage</td></tr>
       <tr><td><a href="/docs/template-versioning">Template Versioning</a></td><td>Version-controlled filter script templates with diff and rollback</td></tr>
+      <tr><td><a href="/docs/notification-channels">Notification Channels</a></td><td>Telegram, Pushover, and ntfy push notification delivery</td></tr>
+      <tr><td><a href="/docs/audit-log">Audit Log</a></td><td>Action tracking with CSV/JSON export for compliance</td></tr>
+      <tr><td><a href="/docs/agent-health">Agent Health</a></td><td>Deep-dive agent stats including GPU, VRAM, disk, and encoding history</td></tr>
+      <tr><td><a href="/docs/agent-update-channels">Agent Update Channels</a></td><td>Stable, beta, and nightly release channels for staged agent rollouts</td></tr>
+      <tr><td><a href="/docs/file-manager">File Manager</a></td><td>Browse, move, delete, and download files from NAS mounts</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Audio &amp; Media</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/subtitle-handling">Subtitle Handling</a></td><td>Extract, convert, embed, and burn-in subtitles via flow nodes</td></tr>
+      <tr><td><a href="/docs/source-thumbnails">Source Thumbnails</a></td><td>Auto-generated preview frames after analysis completes</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Security &amp; Access</h3>
+  <table>
+    <thead>
+      <tr><th>Page</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="/docs/session-management">Session Management</a></td><td>View and terminate active user sessions</td></tr>
+      <tr><td><a href="/docs/api-key-rate-limiting">API Key Rate Limiting</a></td><td>Per-key request limits with global default fallback</td></tr>
     </tbody>
   </table>
 
@@ -104,7 +134,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><td><a href="/docs/architecture">Architecture</a></td><td>System overview, component diagram, and repository layout</td></tr>
       <tr><td><a href="/docs/agents">Agents</a></td><td>Authoritative technical reference for the EncodeSwarmr Agent</td></tr>
       <tr><td><a href="/docs/adr">ADR Index</a></td><td>Architecture Decision Records explaining key design choices</td></tr>
-      <tr><td><a href="/docs/roadmap">Roadmap</a></td><td>Planned features and improvements by phase</td></tr>
+      <tr><td><a href="/docs/roadmap">Roadmap</a></td><td>All 8 completed phases of features and improvements</td></tr>
     </tbody>
   </table>
 

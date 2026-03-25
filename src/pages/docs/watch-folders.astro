@@ -1,0 +1,157 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Watch Folders">
+  <h1>Watch Folders</h1>
+  <p>
+    Monitor directories for new media files and automatically register them as sources with optional analysis scheduling. Watch folders trigger source creation and analysis only — no encoding jobs are created automatically.
+  </p>
+
+  <h2>Configuration</h2>
+  <p>Define watch folders in the controller YAML under the <code>watch_folders</code> key:</p>
+  <pre><code>watch_folders:
+  - name: incoming
+    path: /mnt/nas/incoming
+    windows_path: "\\\\NAS01\\incoming"
+    file_patterns: ["*.mkv", "*.mp4", "*.ts"]
+    poll_interval: 30s
+    auto_analyze: true
+    move_after_analysis: ""
+    enabled: true
+
+  - name: movies
+    path: /mnt/nas/movies
+    windows_path: "\\\\NAS01\\movies"
+    file_patterns: ["*.mkv"]
+    poll_interval: 5m
+    auto_analyze: true
+    enabled: true</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>name</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Human-readable label. Used as the identifier in API calls.</td>
+      </tr>
+      <tr>
+        <td><code>path</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Linux mount path the controller polls.</td>
+      </tr>
+      <tr>
+        <td><code>windows_path</code></td>
+        <td>string</td>
+        <td>—</td>
+        <td>Corresponding UNC path stored on source records for agent access.</td>
+      </tr>
+      <tr>
+        <td><code>file_patterns</code></td>
+        <td>string[]</td>
+        <td><code>["*.mkv", "*.mp4", "*.ts", "*.avi"]</code></td>
+        <td>Glob patterns to match. Empty list uses the defaults shown.</td>
+      </tr>
+      <tr>
+        <td><code>poll_interval</code></td>
+        <td>duration</td>
+        <td><code>30s</code></td>
+        <td>How often the folder is scanned.</td>
+      </tr>
+      <tr>
+        <td><code>auto_analyze</code></td>
+        <td>bool</td>
+        <td><code>false</code></td>
+        <td>When true, schedules analysis and HDR detection jobs for new files automatically.</td>
+      </tr>
+      <tr>
+        <td><code>move_after_analysis</code></td>
+        <td>string</td>
+        <td><code>""</code></td>
+        <td>Optional category tag applied to the source record after analysis completes.</td>
+      </tr>
+      <tr>
+        <td><code>enabled</code></td>
+        <td>bool</td>
+        <td><code>false</code></td>
+        <td>Controls whether polling is active. Can be toggled at runtime via the API.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>How it works</h2>
+  <ol>
+    <li>The controller starts a polling goroutine for each enabled watch folder.</li>
+    <li>On each tick, the folder is scanned and files matching the glob patterns are listed.</li>
+    <li>New files (not already registered as sources) trigger source creation in the database.</li>
+    <li>If <code>auto_analyze</code> is enabled, analysis and HDR detection jobs are automatically scheduled.</li>
+    <li>The source record stores both the Linux <code>path</code> and the <code>windows_path</code> (UNC) so agents on either platform can access the file.</li>
+  </ol>
+
+  <h2>API</h2>
+  <p>All watch folder endpoints require the <strong>admin</strong> role.</p>
+
+  <h3>List watch folders</h3>
+  <pre><code>GET /api/v1/watch-folders</code></pre>
+  <p>Returns all configured watch folders with their current state.</p>
+  <pre><code>curl -s -b cookies.txt http://localhost:8080/api/v1/watch-folders</code></pre>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "data": [
+    &#123;
+      "name": "incoming",
+      "path": "/mnt/nas/incoming",
+      "windows_path": "\\\\NAS01\\incoming",
+      "file_patterns": ["*.mkv", "*.mp4", "*.ts"],
+      "poll_interval": "30s",
+      "auto_analyze": true,
+      "enabled": true,
+      "last_scan": null
+    &#125;
+  ]
+&#125;</code></pre>
+
+  <h3>Enable or disable a watch folder</h3>
+  <pre><code>PUT /api/v1/watch-folders/&#123;name&#125;/enable
+PUT /api/v1/watch-folders/&#123;name&#125;/disable</code></pre>
+  <p>
+    Toggles the folder's enabled state in memory. The change does <strong>not</strong> persist to the YAML config file — a server restart reverts to the configured value.
+  </p>
+  <pre><code>curl -s -b cookies.txt -X PUT http://localhost:8080/api/v1/watch-folders/incoming/disable</code></pre>
+
+  <h3>Trigger an immediate scan</h3>
+  <pre><code>POST /api/v1/watch-folders/&#123;name&#125;/scan</code></pre>
+  <p>
+    Queues an immediate scan without waiting for the next poll interval. Returns <code>202 Accepted</code> and runs the scan asynchronously. The folder must be enabled.
+  </p>
+  <pre><code>curl -s -b cookies.txt -X POST http://localhost:8080/api/v1/watch-folders/incoming/scan</code></pre>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "data": &#123;
+    "name": "incoming",
+    "status": "scan queued"
+  &#125;
+&#125;</code></pre>
+  <p>Returns <code>400</code> if the folder is disabled, <code>404</code> if the folder name is not found, or <code>503</code> if the watcher service is not running.</p>
+
+  <h2>Database</h2>
+  <p>
+    Migration <code>030_watch_folders_rules</code> adds <code>watch_folder</code> and <code>category</code> columns to the <code>sources</code> table, allowing sources to be tagged with the watch folder they originated from.
+  </p>
+
+  <h2>UI</h2>
+  <p>
+    Navigate to <strong>Admin → Watch Folders</strong> to see all configured folders with their status, poll interval, and file patterns. Each folder has:
+  </p>
+  <ul>
+    <li><strong>Enable/Disable</strong> toggle</li>
+    <li><strong>Scan Now</strong> button for on-demand scanning</li>
+    <li>File count and last scan timestamp (when available)</li>
+  </ul>
+  <p>New sources created by watch folders appear in the <strong>Sources</strong> list with a watch-folder badge.</p>
+</DocsLayout>

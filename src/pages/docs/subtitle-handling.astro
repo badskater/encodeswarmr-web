@@ -1,0 +1,174 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Subtitle Handling">
+  <h1>Subtitle Handling</h1>
+  <p>
+    Probe subtitle tracks from source files, and use Flow Pipeline nodes to extract, convert, embed, or burn in subtitles. All probe operations run on the controller using <code>ffprobe</code>; no agent involvement is required for discovery.
+  </p>
+
+  <h2>Probe API</h2>
+
+  <h3>List subtitle tracks</h3>
+  <pre><code>GET /api/v1/sources/&#123;id&#125;/subtitles</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>
+    Runs <code>ffprobe</code> against the source file and returns all subtitle tracks found in the container. Path mappings are applied automatically before probing — UNC paths are translated to their Linux equivalents using the <code>path_mappings</code> table, so agents and the controller share a consistent view of the file.
+  </p>
+  <p><code>ffprobe</code> must be installed and on the PATH of the controller host.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "data": &#123;
+    "source_id": "src_abc123",
+    "tracks": [
+      &#123;
+        "index": 0,
+        "language": "eng",
+        "codec": "subrip",
+        "title": "English"
+      &#125;,
+      &#123;
+        "index": 1,
+        "language": "fra",
+        "codec": "ass",
+        "title": "French (SDH)"
+      &#125;
+    ]
+  &#125;
+&#125;</code></pre>
+  <p>Returns <code>404 Not Found</code> if the source does not exist, or <code>502 Bad Gateway</code> if <code>ffprobe</code> fails to open the file.</p>
+
+  <h3>SubtitleTrack fields</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>index</code></td>
+        <td>int</td>
+        <td>Stream index within the container (zero-based, subtitle streams only).</td>
+      </tr>
+      <tr>
+        <td><code>language</code></td>
+        <td>string</td>
+        <td>ISO 639-2 language code (e.g. <code>eng</code>, <code>fra</code>, <code>jpn</code>). Empty string if not tagged.</td>
+      </tr>
+      <tr>
+        <td><code>codec</code></td>
+        <td>string</td>
+        <td>Codec name as reported by ffprobe (see supported codecs below).</td>
+      </tr>
+      <tr>
+        <td><code>title</code></td>
+        <td>string</td>
+        <td>Human-readable track title from container metadata. May be empty.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Supported codecs</h3>
+  <table>
+    <thead>
+      <tr><th>Format</th><th>ffprobe codec name</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>SRT</td><td><code>subrip</code></td></tr>
+      <tr><td>ASS / SSA</td><td><code>ass</code></td></tr>
+      <tr><td>WebVTT</td><td><code>webvtt</code></td></tr>
+      <tr><td>PGS / Blu-ray</td><td><code>hdmv_pgs_subtitle</code></td></tr>
+      <tr><td>VobSub / DVD</td><td><code>dvd_subtitle</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Flow Pipeline nodes</h2>
+  <p>Subtitle operations are performed by adding nodes to a Flow Pipeline. Nodes reference tracks by their <code>index</code> from the probe response.</p>
+
+  <h3>Extract Subtitles</h3>
+  <p>Extracts one subtitle track to an external sidecar file. Output format is selected from the supported codec list.</p>
+  <p><strong>Key parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>track_index</code></td>
+        <td>Stream index to extract.</td>
+      </tr>
+      <tr>
+        <td><code>output_format</code></td>
+        <td>Target format: <code>subrip</code>, <code>ass</code>, <code>webvtt</code>.</td>
+      </tr>
+      <tr>
+        <td><code>output_path</code></td>
+        <td>Destination file path on the output NAS mount.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Convert Subtitles</h3>
+  <p>
+    Transcodes a subtitle file or embedded track between supported text-based formats (e.g. SRT → ASS). PGS and VobSub image-based formats cannot be converted via this node; use a dedicated OCR workflow.
+  </p>
+
+  <h3>Embed Subtitles</h3>
+  <p>
+    Muxes one or more subtitle tracks into the output container as soft subtitles. Viewers can enable or disable the track at playback time. Re-encoding the video stream is not required.
+  </p>
+  <p><strong>Key parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>track_index</code></td>
+        <td>Source track index, or path to an external subtitle file.</td>
+      </tr>
+      <tr>
+        <td><code>language</code></td>
+        <td>ISO 639-2 language code to tag the muxed track.</td>
+      </tr>
+      <tr>
+        <td><code>default</code></td>
+        <td>Set this track as the default subtitle track (<code>true</code>/<code>false</code>).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Burn-in Subtitles</h3>
+  <p>
+    Hardcodes a subtitle track into the video stream using the <code>subtitles</code> or <code>ass</code> ffmpeg filter. Because pixels are written into the video, this operation requires a full video re-encode and cannot be undone without re-encoding again. Use Embed Subtitles when soft subs are acceptable.
+  </p>
+  <p><strong>Key parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>track_index</code></td>
+        <td>Stream index to burn in.</td>
+      </tr>
+      <tr>
+        <td><code>force_style</code></td>
+        <td>Optional ASS style override string (passed directly to the ffmpeg <code>ass</code> filter).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Example: probe subtitle tracks</h2>
+  <pre><code>curl -s https://encodeswarmr.example.com/api/v1/sources/src_abc123/subtitles \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>Subtitle tracks are accessible from the source detail page:</p>
+  <ol>
+    <li>Open a source from the <strong>Sources</strong> list.</li>
+    <li>Click the <strong>Subtitles</strong> tab.</li>
+    <li>The page calls the probe endpoint and displays a table of detected tracks with index, language, codec, and title.</li>
+    <li>Use the <strong>Flow Pipeline</strong> editor to add subtitle nodes. Drag a subtitle node onto the canvas, select the track index from the dropdown (populated from the probe result), configure the output format, and connect the node to the output.</li>
+  </ol>
+</DocsLayout>

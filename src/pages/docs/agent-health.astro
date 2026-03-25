@@ -1,0 +1,148 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+
+<DocsLayout title="Agent Health">
+  <h1>Agent Health &amp; Monitoring</h1>
+  <p>
+    The agent health endpoints provide a deep-dive view into an individual agent's performance and task history, going beyond the summary data available in the agents list. Use these endpoints to diagnose slow or failing agents, review recent workload, and inspect time-series resource metrics.
+  </p>
+
+  <h2>API</h2>
+
+  <h3>Get agent health</h3>
+  <pre><code>GET /api/v1/agents/&#123;id&#125;/health</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns the full agent record combined with aggregate encoding statistics accumulated over the agent's lifetime.</p>
+  <p><strong>Response:</strong></p>
+  <pre><code>&#123;
+  "agent": &#123;
+    "id": "agt_abc123",
+    "name": "encoder-01",
+    "hostname": "WIN-ENCODER01",
+    "status": "idle",
+    "version": "1.4.2",
+    "last_seen_at": "2026-03-24T12:00:00Z"
+  &#125;,
+  "encoding_stats": &#123;
+    "agent_id": "agt_abc123",
+    "total_tasks": 1842,
+    "completed_tasks": 1810,
+    "failed_tasks": 32,
+    "avg_fps": 47.3,
+    "total_frames": 9214080
+  &#125;
+&#125;</code></pre>
+  <p>Returns <code>404 Not Found</code> when the agent ID does not exist.</p>
+  <p><strong>Example:</strong></p>
+  <pre><code>curl -s https://controller.example.com/api/v1/agents/agt_abc123/health \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+
+  <h3>Encoding stats fields</h3>
+  <table>
+    <thead>
+      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>agent_id</code></td>
+        <td>string</td>
+        <td>ID of the agent these stats belong to.</td>
+      </tr>
+      <tr>
+        <td><code>total_tasks</code></td>
+        <td>integer</td>
+        <td>Total number of encode tasks ever assigned to this agent.</td>
+      </tr>
+      <tr>
+        <td><code>completed_tasks</code></td>
+        <td>integer</td>
+        <td>Tasks that finished with <code>completed</code> status.</td>
+      </tr>
+      <tr>
+        <td><code>failed_tasks</code></td>
+        <td>integer</td>
+        <td>Tasks that finished with <code>failed</code> status.</td>
+      </tr>
+      <tr>
+        <td><code>avg_fps</code></td>
+        <td>float</td>
+        <td>Lifetime average encoding speed in frames per second. NULL avg_fps values and zero-fps tasks are excluded from the average.</td>
+      </tr>
+      <tr>
+        <td><code>total_frames</code></td>
+        <td>integer</td>
+        <td>Cumulative frames encoded across all completed tasks.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>List recent tasks</h3>
+  <pre><code>GET /api/v1/agents/&#123;id&#125;/recent-tasks?limit=20</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns the most recent encode tasks dispatched to this agent. Useful for reviewing what the agent has been doing and identifying patterns in failures.</p>
+  <p><strong>Query parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Max</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>limit</code></td>
+        <td>integer</td>
+        <td><code>20</code></td>
+        <td><code>100</code></td>
+        <td>Number of tasks to return, ordered by most recent first.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response:</strong> A JSON array of task objects (same shape as tasks returned from job task lists).</p>
+  <p>Returns <code>404 Not Found</code> when the agent ID does not exist.</p>
+  <p><strong>Example:</strong></p>
+  <pre><code>curl -s "https://controller.example.com/api/v1/agents/agt_abc123/recent-tasks?limit=50" \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+
+  <h3>Get time-series metrics</h3>
+  <pre><code>GET /api/v1/agents/&#123;id&#125;/metrics?window=1h</code></pre>
+  <p><strong>Required role:</strong> <code>viewer</code></p>
+  <p>Returns sampled CPU, GPU, and memory metrics for the agent over the requested time window. Samples are recorded by the agent during active tasks and forwarded to the controller via heartbeat.</p>
+  <p><strong>Query parameters:</strong></p>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>window</code></td>
+        <td>duration string</td>
+        <td><code>1h</code></td>
+        <td>How far back to look, e.g. <code>30m</code>, <code>2h</code>, <code>24h</code>. Parsed with Go's <code>time.ParseDuration</code>. Invalid values are silently ignored and the default is used.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Response:</strong> A JSON array of metric sample objects, ordered by timestamp ascending.</p>
+  <p>Returns <code>404 Not Found</code> when the agent ID does not exist.</p>
+  <p><strong>Example:</strong></p>
+  <pre><code># Last 30 minutes of metrics
+curl -s "https://controller.example.com/api/v1/agents/agt_abc123/metrics?window=30m" \
+  -H "Cookie: session=&lt;token&gt;"
+
+# Last 24 hours
+curl -s "https://controller.example.com/api/v1/agents/agt_abc123/metrics?window=24h" \
+  -H "Cookie: session=&lt;token&gt;"</code></pre>
+
+  <h2>UI walkthrough</h2>
+  <p>The agent detail page is accessible from the main agents list:</p>
+  <ol>
+    <li>Navigate to <strong>Admin → Agents</strong>.</li>
+    <li>Click on any agent name in the table.</li>
+    <li>
+      The <strong>Agent Detail</strong> page opens with three sections:
+      <ul>
+        <li><strong>Health stats</strong> — displays the encoding stats table (total tasks, completed, failed, average FPS, total frames).</li>
+        <li><strong>Recent tasks</strong> — a paginated table of the last tasks run on this agent, including status, source file, duration, and FPS.</li>
+        <li><strong>Metrics charts</strong> — time-series graphs of CPU utilisation, memory usage, and GPU load over the selected window (default 1 hour). Use the window selector to switch between 30 minutes, 1 hour, 6 hours, and 24 hours.</li>
+      </ul>
+    </li>
+  </ol>
+</DocsLayout>
