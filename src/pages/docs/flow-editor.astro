@@ -45,7 +45,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
   <h2>Node Types</h2>
   <p>
-    The editor ships with 35 built-in node types across 9 categories. Third-party nodes can be added via the Plugin System.
+    The editor ships with 38 built-in node types across 9 categories. Third-party nodes can be added via the Plugin System.
   </p>
 
   <h3>Input (2 nodes)</h3>
@@ -54,8 +54,8 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>FileInput</code></td><td>Reads a local file path or UNC share. Supports glob patterns for batch operations.</td></tr>
-      <tr><td><code>CloudInput</code></td><td>Pulls a file from an S3, GCS, or Azure Blob URI. Credentials are resolved from the environment or a registered cloud source.</td></tr>
+      <tr><td><code>Input File</code></td><td>Reads a single local file path or UNC share for encoding.</td></tr>
+      <tr><td><code>Input Folder</code></td><td>Scans a directory (optionally recursive) and queues each matching file as a separate source.</td></tr>
     </tbody>
   </table>
 
@@ -65,11 +65,11 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>Encode</code></td><td>Core encoding node. Select a preset or configure codec, bitrate, resolution, and FFmpeg flags directly.</td></tr>
-      <tr><td><code>ChunkedEncode</code></td><td>Splits the source into chunks and encodes in parallel across available agents. Supports adaptive or fixed chunking.</td></tr>
-      <tr><td><code>Transcode</code></td><td>Stream-copy passthrough with optional transcoding for selected streams only.</td></tr>
-      <tr><td><code>TwoPass</code></td><td>Runs a two-pass encode for better bitrate accuracy. Automatically handles pass-1 log file routing between agents.</td></tr>
-      <tr><td><code>RemuxOnly</code></td><td>Container remux without re-encoding. Fast; no quality loss.</td></tr>
+      <tr><td><code>x265</code></td><td>Encodes video with libx265 (HEVC). Configure CRF, preset, and x265-params directly.</td></tr>
+      <tr><td><code>x264</code></td><td>Encodes video with libx264 (H.264). Configure CRF, preset, profile, and level.</td></tr>
+      <tr><td><code>SVT-AV1</code></td><td>Encodes video with SVT-AV1. Configure CRF and encoder preset (0–13).</td></tr>
+      <tr><td><code>Stream Copy</code></td><td>Copies the video stream without re-encoding. Fast; no quality loss. Used for remux-only operations.</td></tr>
+      <tr><td><code>NVENC H.265</code></td><td>GPU-accelerated HEVC encoding via NVIDIA NVENC. Requires an NVENC-capable agent.</td></tr>
     </tbody>
   </table>
 
@@ -79,10 +79,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>MediaInfo</code></td><td>Runs MediaInfo against the source and exposes stream metadata as flow variables (resolution, codec, bitrate, HDR type, etc.).</td></tr>
-      <tr><td><code>HDRAnalyse</code></td><td>Detects HDR format (HDR10, HDR10+, Dolby Vision, HLG) and extracts mastering display metadata and MaxCLL/MaxFALL values.</td></tr>
-      <tr><td><code>SceneDetect</code></td><td>Runs PySceneDetect to find scene boundaries. Outputs a boundary list used by ChunkedEncode for chunk-aligned splitting.</td></tr>
-      <tr><td><code>LoudnessAnalyse</code></td><td>Measures integrated loudness (LUFS), true peak, and LRA using the EBU R128 algorithm. Results are stored as variables for downstream audio nodes.</td></tr>
+      <tr><td><code>HDR Detect</code></td><td>Detects HDR format (HDR10, HDR10+, Dolby Vision, HLG) and extracts mastering display metadata and MaxCLL/MaxFALL values.</td></tr>
+      <tr><td><code>Scene Scan</code></td><td>Runs PySceneDetect to find scene boundaries. Outputs a boundary list used by chunked encoding for chunk-aligned splitting.</td></tr>
+      <tr><td><code>VMAF Score</code></td><td>Computes VMAF quality score between the source and a reference encode. Results are stored as flow variables.</td></tr>
+      <tr><td><code>Probe Info</code></td><td>Runs ffprobe against the source and exposes stream metadata as flow variables (resolution, codec, bitrate, HDR type, etc.).</td></tr>
     </tbody>
   </table>
 
@@ -92,11 +92,11 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>If</code></td><td>Evaluates a boolean expression against flow variables. Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
-      <tr><td><code>Switch</code></td><td>Multi-branch switch on a string or numeric variable. Add as many cases as needed; unmatched values route to the <em>default</em> port.</td></tr>
-      <tr><td><code>Compare</code></td><td>Compares two values (variables, literals, or node outputs) with operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>, <code>contains</code>, <code>matches</code>.</td></tr>
-      <tr><td><code>HasStream</code></td><td>Checks whether the source contains a stream matching a filter (type, codec, language). Useful for branching on the presence of subtitles or a specific audio track.</td></tr>
-      <tr><td><code>IsHDR</code></td><td>Convenience condition that evaluates to true when the source contains any HDR signal. Equivalent to an <code>If</code> node checking the <code>hdr_type</code> variable.</td></tr>
+      <tr><td><code>File Size</code></td><td>Compares the source file size against a threshold. Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
+      <tr><td><code>Resolution</code></td><td>Checks the video resolution against a target (e.g., 4K, 1080p). Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
+      <tr><td><code>Codec</code></td><td>Checks whether the source video stream uses a specified codec. Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
+      <tr><td><code>HDR Type</code></td><td>Checks the detected HDR type against a specified value (HDR10, DV, etc.). Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
+      <tr><td><code>File Extension</code></td><td>Checks the source file extension against a specified value. Has two output ports: <em>true</em> and <em>false</em>.</td></tr>
     </tbody>
   </table>
 
@@ -106,10 +106,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>AudioNormalise</code></td><td>Applies EBU R128 loudness normalisation using values from a preceding LoudnessAnalyse node, or measures inline.</td></tr>
-      <tr><td><code>AudioMix</code></td><td>Downmixes or upmixes audio channels. Common use: 5.1 → stereo compatibility track.</td></tr>
-      <tr><td><code>AudioExtract</code></td><td>Extracts one or more audio streams to separate files for independent processing.</td></tr>
-      <tr><td><code>AudioMerge</code></td><td>Merges multiple audio files or streams back into the container alongside video.</td></tr>
+      <tr><td><code>FLAC</code></td><td>Encodes audio to FLAC lossless format.</td></tr>
+      <tr><td><code>Opus</code></td><td>Encodes audio to Opus format. Configure bitrate and channel layout.</td></tr>
+      <tr><td><code>AAC-LC</code></td><td>Encodes audio to AAC-LC. Configure bitrate and channel layout for broad device compatibility.</td></tr>
+      <tr><td><code>Extract Audio</code></td><td>Extracts one or more audio streams to separate files for independent processing.</td></tr>
     </tbody>
   </table>
 
@@ -119,10 +119,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>FileOutput</code></td><td>Writes the encoded file to a local path or UNC share. Supports token substitution in the path (e.g., <code>&#123;'&#123;'&#125;source_name&#123;'&#125;'&#125;.mkv</code>).</td></tr>
-      <tr><td><code>CloudUpload</code></td><td>Uploads the output to an S3, GCS, or Azure Blob destination URI.</td></tr>
-      <tr><td><code>MoveFile</code></td><td>Moves or renames the output file after encoding. Can be chained after FileOutput to implement atomic delivery.</td></tr>
-      <tr><td><code>DeleteSource</code></td><td>Deletes the original source file after a successful encode. Requires explicit confirmation in node config.</td></tr>
+      <tr><td><code>Move File</code></td><td>Moves the output file to a specified destination path after encoding.</td></tr>
+      <tr><td><code>Copy File</code></td><td>Copies the output file to a specified destination path, leaving the original in place.</td></tr>
+      <tr><td><code>Rename</code></td><td>Renames the output file in place. Supports token substitution (e.g., <code>&#123;source_name&#125;</code>).</td></tr>
+      <tr><td><code>Set Output Path</code></td><td>Sets the output path variable used by downstream file operation nodes. Supports path templates.</td></tr>
     </tbody>
   </table>
 
@@ -132,10 +132,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>EmailNotify</code></td><td>Sends an email with a configurable subject and body template. Uses the SMTP settings from the global configuration.</td></tr>
-      <tr><td><code>WebhookNotify</code></td><td>Posts a JSON payload to a configured webhook URL. Payload template supports all flow variables.</td></tr>
-      <tr><td><code>SlackNotify</code></td><td>Posts a message to a Slack channel via an incoming webhook URL.</td></tr>
-      <tr><td><code>PushoverNotify</code></td><td>Sends a push notification via the Pushover API.</td></tr>
+      <tr><td><code>Webhook</code></td><td>Posts a JSON payload to a configured webhook URL. Payload template supports all flow variables.</td></tr>
+      <tr><td><code>Discord</code></td><td>Posts a message to a Discord channel via a Discord webhook URL.</td></tr>
+      <tr><td><code>Teams</code></td><td>Posts an adaptive card message to a Microsoft Teams channel via an incoming webhook.</td></tr>
+      <tr><td><code>Slack</code></td><td>Posts a message to a Slack channel via an incoming webhook URL.</td></tr>
     </tbody>
   </table>
 
@@ -145,8 +145,8 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>SubFlow</code></td><td>Embeds another saved flow as a reusable sub-routine. Input and output variables pass through. Useful for shared normalisation or notification logic.</td></tr>
-      <tr><td><code>SetVariable</code></td><td>Creates or overwrites a flow variable with a literal value or expression. Use to set defaults or transform values for downstream nodes.</td></tr>
+      <tr><td><code>Run Template</code></td><td>Executes another saved flow template as a reusable sub-routine. Input and output variables pass through.</td></tr>
+      <tr><td><code>Frameserver Template</code></td><td>Pipes frames through a frameserver (e.g., VapourSynth, AviSynth) script before encoding. The script path is configurable.</td></tr>
     </tbody>
   </table>
 
@@ -156,10 +156,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Node</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>Wait</code></td><td>Pauses flow execution until a condition becomes true or a timeout elapses. Useful for waiting on an external dependency job.</td></tr>
-      <tr><td><code>Retry</code></td><td>Wraps a section of the flow in retry logic with configurable attempts and backoff strategy.</td></tr>
-      <tr><td><code>Parallel</code></td><td>Fans out to multiple branches that execute concurrently. A join port waits for all branches to complete before continuing.</td></tr>
-      <tr><td><code>End</code></td><td>Explicitly terminates the flow with a success or failure status. Any path that reaches a dead end without an End node is treated as an implicit success.</td></tr>
+      <tr><td><code>Chunk Split</code></td><td>Splits the source into segments for parallel encoding across agents. Supports adaptive or fixed chunking strategies.</td></tr>
+      <tr><td><code>Merge/Concat</code></td><td>Concatenates encoded chunks or separate files back into a single output container.</td></tr>
+      <tr><td><code>Fail Flow</code></td><td>Explicitly terminates the flow with a failure status and a configurable error message.</td></tr>
+      <tr><td><code>Delay</code></td><td>Pauses flow execution for a specified number of seconds before continuing to the next node.</td></tr>
     </tbody>
   </table>
 

@@ -18,7 +18,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     <tbody>
       <tr><td>OS</td><td>Ubuntu 22.04 / RHEL 9 / Rocky 9</td><td>Ubuntu 24.04 LTS</td></tr>
       <tr><td>CPU</td><td>2 vCPU</td><td>4 vCPU</td></tr>
-      <tr><td>RAM</td><td>4 GB</td><td>8 GB</td></tr>
+      <tr><td>RAM</td><td>2 GB</td><td>4+ GB</td></tr>
       <tr><td>Disk</td><td>20 GB</td><td>50 GB SSD</td></tr>
       <tr><td>Network</td><td>1 Gbps</td><td>10 Gbps</td></tr>
       <tr><td>Ports</td><td colspan="2">8080/tcp (HTTP), 9443/tcp (gRPC/mTLS)</td></tr>
@@ -81,7 +81,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
   <h3>PostgreSQL Requirements</h3>
   <p>
-    PostgreSQL 15 or 16 is required. The controller creates its schema automatically on first start.
+    PostgreSQL 16+ is required. The controller creates its schema automatically on first start.
     The database user requires <code>CREATEDB</code> or the database must be pre-created with the
     user granted all privileges.
   </p>
@@ -99,7 +99,7 @@ DE_DB_HOST=localhost
 DE_DB_PORT=5432
 DE_DB_NAME=encodeswarmr
 DE_DB_USER=encodeswarmr
-DE_DB_PASSWORD=changeme
+DE_DB_PASS=changeme
 DE_DB_SSLMODE=disable
 
 # HTTP / gRPC listeners
@@ -112,7 +112,7 @@ DE_TLS_SERVER_CERT=/etc/encodeswarmr/certs/server.crt
 DE_TLS_SERVER_KEY=/etc/encodeswarmr/certs/server.key
 
 # Secrets
-DE_SECRET_KEY=replace-with-32-byte-random-string
+DE_SESSION_SECRET=replace-with-32-byte-random-string
 
 # Optional: OIDC SSO
 # DE_OIDC_ISSUER=https://accounts.google.com
@@ -343,7 +343,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   <h3>Directory Structure</h3>
   <pre><code># Windows
 C:\ProgramData\EncodeSwarmr\
-  agent.yml          ← agent configuration
+  agent.yaml          ← agent configuration
   certs\
     ca.crt
     agent.crt
@@ -354,7 +354,7 @@ C:\ProgramData\EncodeSwarmr\
 
 # Linux
 /etc/encodeswarmr/
-  agent.yml
+  agent.yaml
   certs/
     ca.crt
     agent.crt
@@ -363,7 +363,7 @@ C:\ProgramData\EncodeSwarmr\
 /var/lib/encodeswarmr/journal/</code></pre>
 
   <h3>Agent Configuration YAML</h3>
-  <pre><code># agent.yml
+  <pre><code># agent.yaml
 controller:
   address: "controller.example.com:9443"
   tls:

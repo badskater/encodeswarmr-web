@@ -18,7 +18,8 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   </p>
   <p>
     When the active controller becomes unavailable a standby detects the stale lock and promotes itself to active
-    within the configured <code>lock_timeout</code> window (default 30 seconds). No manual intervention is required.
+    within one heartbeat interval (&lt;=5 s). On a clean shutdown, <code>pg_advisory_unlock</code> is called explicitly
+    so promotion happens within 5 s. No manual intervention is required.
   </p>
 
   <h2>Leader Election</h2>

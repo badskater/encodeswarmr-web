@@ -5,7 +5,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 <DocsLayout title="API Client SDKs">
   <h1>API Client SDKs</h1>
   <p>
-    EncodeSwarmr ships with pre-generated API client libraries for TypeScript and Go. The clients are generated from the OpenAPI 3.1 specification at <code>/api/v1/openapi.json</code> using <a href="https://github.com/oapi-codegen/oapi-codegen">oapi-codegen</a> (Go) and the OpenAPI Generator TypeScript Fetch client (TypeScript). They live in the repository under <code>api/generated/</code> and are regenerated automatically on every API schema change in CI.
+    EncodeSwarmr ships with pre-generated API client libraries for TypeScript and Go. The clients are generated from the OpenAPI 3.1 specification at <code>/api/v1/openapi.json</code> using <a href="https://github.com/oapi-codegen/oapi-codegen">oapi-codegen</a> (Go) and <a href="https://github.com/hey-api/openapi-ts">@hey-api/openapi-ts</a> with <code>@hey-api/client-fetch</code> (TypeScript). They live in the repository under <code>api/generated/</code> and are regenerated automatically on every API schema change in CI.
   </p>
 
   <h2>OpenAPI Spec Location</h2>
@@ -23,7 +23,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   </p>
   <pre><code>api/
 └── generated/
-    ├── typescript/
+    ├── ts/
     │   ├── src/
     │   │   ├── api.ts          # All API operations as typed async functions
     │   │   ├── models.ts       # Request/response types (interfaces)
@@ -31,7 +31,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     │   ├── package.json
     │   └── tsconfig.json
     └── go/
-        ├── client.gen.go       # HTTP client with typed methods
+        ├── client.go           # HTTP client with typed methods
         ├── types.gen.go        # Go structs for all request/response bodies
         └── go.mod</code></pre>
 
@@ -42,26 +42,20 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
   <h3>TypeScript</h3>
   <p>Install the generator:</p>
-  <pre><code>npm install -g @openapitools/openapi-generator-cli</code></pre>
+  <pre><code>npm install --save-dev @hey-api/openapi-ts @hey-api/client-fetch</code></pre>
   <p>Generate the client:</p>
-  <pre><code>npx openapi-generator-cli generate \
-  -i api/openapi.yaml \
-  -g typescript-fetch \
-  -o api/generated/typescript \
-  --additional-properties=supportsES6=true,typescriptThreePlus=true</code></pre>
+  <pre><code>npx @hey-api/openapi-ts</code></pre>
   <p>
-    The generated client uses the native <code>fetch</code> API, so it works in both Node.js (18+) and browser environments without additional dependencies. To use it in your project, either copy the <code>api/generated/typescript/src/</code> directory into your codebase or link the package locally.
+    The generated client uses the native <code>fetch</code> API, so it works in both Node.js (18+) and browser environments without additional dependencies. To use it in your project, either copy the <code>api/generated/ts/src/</code> directory into your codebase or link the package locally.
   </p>
 
   <h3>Go</h3>
   <p>Install oapi-codegen:</p>
   <pre><code>go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest</code></pre>
   <p>Generate client and types:</p>
-  <pre><code>go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen \
-  --config api/oapi-codegen-config.yaml \
-  api/openapi.yaml</code></pre>
+  <pre><code>go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest -config api/oapi-codegen.yaml api/openapi.yaml</code></pre>
   <p>
-    The <code>api/oapi-codegen-config.yaml</code> file in the repository configures the output paths, package name, and which templates to use. By default it generates both the types (<code>types.gen.go</code>) and the <code>net/http</code>-based client (<code>client.gen.go</code>).
+    The <code>api/oapi-codegen.yaml</code> file in the repository configures the output paths, package name, and which templates to use. By default it generates both the types (<code>types.gen.go</code>) and the <code>net/http</code>-based client (<code>client.go</code>).
   </p>
 
   <h2>Generated Output</h2>
@@ -71,22 +65,22 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     </thead>
     <tbody>
       <tr>
-        <td><code>api/generated/typescript/src/api.ts</code></td>
+        <td><code>api/generated/ts/src/api.ts</code></td>
         <td>TypeScript</td>
         <td>One typed async function per API operation. Functions accept a typed request object and return a typed response. Errors throw a typed <code>ApiError</code> with status code and Problem Details body.</td>
       </tr>
       <tr>
-        <td><code>api/generated/typescript/src/models.ts</code></td>
+        <td><code>api/generated/ts/src/models.ts</code></td>
         <td>TypeScript</td>
         <td>TypeScript interfaces for every request body, response body, and enum defined in the OpenAPI spec. Nullable fields are typed as <code>T | null</code>; optional fields use <code>?</code>.</td>
       </tr>
       <tr>
-        <td><code>api/generated/typescript/src/index.ts</code></td>
+        <td><code>api/generated/ts/src/index.ts</code></td>
         <td>TypeScript</td>
         <td>Barrel re-export of all public symbols from <code>api.ts</code> and <code>models.ts</code>.</td>
       </tr>
       <tr>
-        <td><code>api/generated/go/client.gen.go</code></td>
+        <td><code>api/generated/go/client.go</code></td>
         <td>Go</td>
         <td>A <code>Client</code> struct with one method per API operation. Each method accepts a <code>context.Context</code> and a typed request struct, and returns a typed response struct and an <code>error</code>.</td>
       </tr>

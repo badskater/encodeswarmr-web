@@ -13,10 +13,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>File</th><th>Dashboard Name</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>grafana/encodeswarmr-overview.json</code></td><td>EncodeSwarmr — Overview</td><td>High-level job and agent summary</td></tr>
-      <tr><td><code>grafana/encodeswarmr-agents.json</code></td><td>EncodeSwarmr — Agents</td><td>Per-agent resource and status panels</td></tr>
-      <tr><td><code>grafana/encodeswarmr-jobs.json</code></td><td>EncodeSwarmr — Jobs</td><td>Job lifecycle, duration, and error rates</td></tr>
-      <tr><td><code>grafana/encodeswarmr-queue.json</code></td><td>EncodeSwarmr — Queue</td><td>Queue depth, wait time, and scheduling lag</td></tr>
+      <tr><td><code>grafana/encodeswarmr.json</code></td><td>EncodeSwarmr</td><td>Job throughput, agent health, queue depth, and encoding performance</td></tr>
     </tbody>
   </table>
 
@@ -111,7 +108,7 @@ providers:
   <pre><code>curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $GRAFANA_API_KEY" \
-  -d @grafana/encodeswarmr-overview.json \
+  -d @grafana/encodeswarmr.json \
   http://localhost:3000/api/dashboards/import</code></pre>
 
   <h2>Prometheus Scrape Configuration</h2>

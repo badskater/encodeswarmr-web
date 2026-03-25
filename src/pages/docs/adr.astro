@@ -13,16 +13,16 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>ADR</th><th>Title</th><th>Status</th></tr>
     </thead>
     <tbody>
-      <tr><td>ADR-001</td><td>Use gRPC with mTLS for Controller-Agent communication</td><td>Accepted</td></tr>
-      <tr><td>ADR-002</td><td>PostgreSQL as the Controller state store</td><td>Accepted</td></tr>
-      <tr><td>ADR-003</td><td>SQLite journal on Agents for offline resilience</td><td>Accepted</td></tr>
-      <tr><td>ADR-004</td><td>Compile the React SPA into the Controller binary</td><td>Accepted</td></tr>
-      <tr><td>ADR-005</td><td>Plugin interface for codec backends</td><td>Accepted</td></tr>
-      <tr><td>ADR-006</td><td>AviSynth / VapourSynth template engine for filter scripts</td><td>Accepted</td></tr>
-      <tr><td>ADR-007</td><td>Adaptive chunked encoding for parallelism</td><td>Accepted</td></tr>
-      <tr><td>ADR-008</td><td>WebSocket event hub for real-time dashboard updates</td><td>Accepted</td></tr>
-      <tr><td>ADR-009</td><td>Prometheus /metrics endpoints on Controller and Agents</td><td>Accepted</td></tr>
-      <tr><td>ADR-010</td><td>Per-agent certificate issuance via built-in CA</td><td>Accepted</td></tr>
+      <tr><td>ADR-001</td><td>Language: Go</td><td>Accepted</td></tr>
+      <tr><td>ADR-002</td><td>Database: PostgreSQL</td><td>Accepted</td></tr>
+      <tr><td>ADR-003</td><td>Agent Communication: gRPC + mTLS</td><td>Accepted</td></tr>
+      <tr><td>ADR-004</td><td>Split Platform: Windows Agents, Linux Controller</td><td>Accepted</td></tr>
+      <tr><td>ADR-005</td><td>Server-Side Script Generation</td><td>Accepted</td></tr>
+      <tr><td>ADR-006</td><td>Agent Offline Resilience: SQLite Journal</td><td>Accepted</td></tr>
+      <tr><td>ADR-007</td><td>Chunk Encoding Architecture</td><td>Accepted</td></tr>
+      <tr><td>ADR-008</td><td>Controller-Side Concat Task</td><td>Accepted</td></tr>
+      <tr><td>ADR-009</td><td>Template Starter Library and Variable Reference</td><td>Accepted</td></tr>
+      <tr><td>ADR-010</td><td>Job Chaining and Chain Groups</td><td>Accepted</td></tr>
     </tbody>
   </table>
 
@@ -48,21 +48,27 @@ Describe the resulting context after the decision is applied. Note both
 positive outcomes and trade-offs or risks introduced.
 </code></pre>
 
-  <h2>ADR-001: Use gRPC with mTLS for Controller-Agent Communication</h2>
+  <h2>ADR-001: Language: Go</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> The controller and agent processes need to be cross-platform, produce small self-contained binaries, and handle high concurrency for managing many simultaneous agent connections and encode tasks.</p>
+  <p><strong>Decision:</strong> Implement both the controller and agent in Go. Go's standard library, goroutines, and single-binary compilation model are a strong fit for this use case.</p>
+  <p><strong>Consequences:</strong> Single-binary deployment with no runtime dependency. Fast compilation and cross-compilation for Windows and Linux targets. Team must be proficient in Go.</p>
+
+  <h2>ADR-003: Agent Communication: gRPC + mTLS</h2>
   <p><strong>Status:</strong> Accepted</p>
   <p><strong>Context:</strong> Agents run on remote machines, potentially across untrusted networks. The communication protocol needs to be efficient for streaming progress updates and must authenticate both ends without requiring an external identity provider.</p>
   <p><strong>Decision:</strong> Use gRPC over TLS with mutual authentication (mTLS). The Controller runs a built-in certificate authority and issues a unique certificate to each agent at enrolment time. Agents present their certificate on every connection.</p>
   <p><strong>Consequences:</strong> Strong security with no shared secrets. Certificate rotation is a manual process today; automated rotation is planned (see Roadmap). The gRPC binary framing is more efficient than REST for high-frequency progress streaming.</p>
 
-  <h2>ADR-004: Compile the React SPA into the Controller Binary</h2>
-  <p><strong>Status:</strong> Accepted</p>
-  <p><strong>Context:</strong> Shipping the frontend as a separate service adds operational complexity (two processes, two containers, CORS configuration). Operators deploying on-premises value single-binary simplicity.</p>
-  <p><strong>Decision:</strong> Embed the Vite-built React SPA into the Controller Go binary using <code>go:embed</code>. The Controller serves the frontend from memory on the same port as the REST API.</p>
-  <p><strong>Consequences:</strong> Single binary deployment. Frontend changes require a full binary rebuild and redeploy. Acceptable for a server-side application where hot-reload is used during development only.</p>
-
-  <h2>ADR-007: Adaptive Chunked Encoding for Parallelism</h2>
+  <h2>ADR-007: Chunk Encoding Architecture</h2>
   <p><strong>Status:</strong> Accepted</p>
   <p><strong>Context:</strong> Long-form content (feature films, sports events) can take many hours to encode on a single agent. Better utilisation is achieved by splitting the source into segments and encoding them in parallel across multiple agents.</p>
-  <p><strong>Decision:</strong> The Controller optionally splits a source file into N segments using scene-cut boundaries detected by PySceneDetect or fixed-interval keyframe splitting. Each segment becomes an independent task. On completion, the Controller uses ffmpeg to concatenate the outputs.</p>
+  <p><strong>Decision:</strong> The Controller optionally splits a source file into N segments using scene-cut boundaries detected by PySceneDetect or fixed-interval keyframe splitting. Each segment becomes an independent task dispatched to agents.</p>
   <p><strong>Consequences:</strong> Near-linear speedup proportional to agent count. Adds complexity around segment boundary alignment and audio continuity. Chunk-level retry is possible without re-encoding the entire source.</p>
+
+  <h2>ADR-008: Controller-Side Concat Task</h2>
+  <p><strong>Status:</strong> Accepted</p>
+  <p><strong>Context:</strong> After chunk encoding completes, the encoded segments must be merged into a single output file. This concatenation step needs to be reliable and not require agent-side coordination.</p>
+  <p><strong>Decision:</strong> The Controller generates and dispatches a dedicated concat task after all chunk tasks complete. The concat task runs ffmpeg on a single agent to merge the segments.</p>
+  <p><strong>Consequences:</strong> Concat is a first-class task with its own status, retry, and logging. Keeps agent logic simple. The concat agent must have access to all segment files on shared storage.</p>
 </DocsLayout>

@@ -32,9 +32,9 @@ controller:
 
   reconnect:
     # Initial delay before the first reconnect attempt
-    initial_interval: 5s
+    initial_delay: 5s
     # Maximum delay cap for exponential back-off
-    max_interval: 5m
+    max_delay: 5m
     # Multiplier applied to the interval after each failed attempt (e.g. 2 = double)
     multiplier: 2.0
     # Optional upper bound on total reconnect duration (0 = unlimited)
@@ -213,7 +213,7 @@ logging:
       </tr>
       <tr>
         <td><code>DE_SESSION_SECRET</code></td>
-        <td>Secret key used to sign and verify HTTP session cookies. Must be at least 32 bytes of random data. Overrides <code>auth.session_secret</code>.</td>
+        <td>Secret key used to sign and verify HTTP session cookies. Must be a 64-char hex string. Overrides <code>auth.session_secret</code>.</td>
       </tr>
       <tr>
         <td><code>DE_OIDC_CLIENT_ID</code></td>
@@ -269,12 +269,12 @@ logging:
            │  (job assigned)                               │
            ▼                                              │
   ┌─────────────────┐                                     │
-  │   PREPARING     │  Validating paths, checking tool    │
+  │   VALIDATING    │  Validating paths, checking tool    │
   └────────┬────────┘  availability, creating work dir.   │
            │                                              │
            ▼                                              │
   ┌─────────────────┐                                     │
-  │    ENCODING     │  Spawning encoder process;           │
+  │    RUNNING      │  Spawning encoder process;           │
   └────────┬────────┘  streaming progress to controller.  │
            │                                              │
            ▼                                              │
@@ -303,7 +303,7 @@ logging:
     <tbody>
       <tr>
         <td>Controller API</td>
-        <td>Go (net/http + chi router)</td>
+        <td>stdlib net/http</td>
         <td>REST API serving JSON; also hosts the embedded web UI</td>
       </tr>
       <tr>
@@ -313,7 +313,7 @@ logging:
       </tr>
       <tr>
         <td>Controller database</td>
-        <td>PostgreSQL 15+</td>
+        <td>PostgreSQL 16+ with pgx</td>
         <td>Stores jobs, agents, templates, users, audit log</td>
       </tr>
       <tr>
@@ -323,12 +323,12 @@ logging:
       </tr>
       <tr>
         <td>Web UI</td>
-        <td>React 18 + Vite + Tailwind CSS</td>
+        <td>React 19 + Vite 8 (embedded via embed.FS)</td>
         <td>Embedded into the controller binary via Go embed</td>
       </tr>
       <tr>
         <td>Authentication</td>
-        <td>Session cookies + optional OIDC</td>
+        <td>Session cookies + optional OIDC + API keys</td>
         <td>Roles: admin, operator, viewer</td>
       </tr>
       <tr>

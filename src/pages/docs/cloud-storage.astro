@@ -5,7 +5,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 <DocsLayout title="Cloud Storage">
   <h1>Cloud Storage</h1>
   <p>
-    EncodeSwarmr can read source files from and write encoded output to cloud object storage. Sources and output destinations are identified by URI, with credentials resolved from the environment. No special SDK is required on the agent; the Controller downloads source files to agent-local scratch space before encoding, and uploads results when encoding completes.
+    EncodeSwarmr can read source files from and write encoded output to cloud object storage. Sources and output destinations are identified by URI, with credentials resolved from the environment. No special SDK is required on the agent; the agent downloads source files to its own local scratch space before encoding, and uploads results when encoding completes.
   </p>
 
   <h2>Supported URI Schemes</h2>
@@ -58,14 +58,9 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     &#123;
       "Effect": "Allow",
       "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
+        "s3:GetObject"
       ],
       "Resource": [
-        "arn:aws:s3:::my-bucket",
         "arn:aws:s3:::my-bucket/*"
       ]
     &#125;
@@ -123,7 +118,8 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                           Agent                             │
-│  4. Downloads s3://bucket/source.mkv → /scratch/source.mkv  │
+│  4. Agent downloads s3://bucket/source.mkv →                │
+│     /scratch/source.mkv                                     │
 │     (streaming download with SHA-256 verification)          │
 │                                                             │
 │  5. Encodes /scratch/source.mkv → /scratch/output.mkv       │
@@ -136,7 +132,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 │  8. Reports completion to Controller                        │
 └─────────────────────────────────────────────────────────────┘</code></pre>
   <p>
-    Downloads use range-request streaming so that large files do not require full buffering before encoding begins. The agent starts encoding as soon as the download has buffered a configurable lead time (default: 30 s). Uploads use multipart upload with a part size of 64 MB; failed parts are retried up to 3 times before the job is marked failed.
+    The agent handles the full download and upload lifecycle independently. Downloads use range-request streaming so that large files do not require full buffering before encoding begins. The agent starts encoding as soon as the download has buffered a configurable lead time (default: 30 s). Uploads use multipart upload with a part size of 64 MB; failed parts are retried up to 3 times before the job is marked failed.
   </p>
 
   <h2>Registering a Cloud Source</h2>
@@ -155,17 +151,14 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '&#123;
-    "uri": "s3://my-bucket/media/film.mkv",
-    "type": "cloud",
-    "auto_analyze": true,
-    "tags": ["s3", "library"]
+    "cloud_uri": "s3://my-bucket/media/film.mkv",
+    "auto_analyze": true
   &#125;'
 
 HTTP/1.1 201 Created
 &#123;
   "id": "src_cloud001",
-  "uri": "s3://my-bucket/media/film.mkv",
-  "type": "cloud",
+  "cloud_uri": "s3://my-bucket/media/film.mkv",
   "provider": "s3",
   "size_bytes": 15728640000,
   "analyzed": false,
@@ -174,16 +167,8 @@ HTTP/1.1 201 Created
 
   <h2>Database Migration</h2>
   <p>
-    Cloud storage support was introduced in schema migration <code>0012_cloud_sources</code>. If you are upgrading from a version prior to this migration, run the following SQL to add the required columns (or use <code>encodeswarmr-controller migrate up</code> which applies all pending migrations automatically):
+    Cloud storage support was introduced in schema migration <code>017</code>. If you are upgrading from a version prior to this migration, run the following SQL to add the required column (or use <code>encodeswarmr-controller migrate up</code> which applies all pending migrations automatically):
   </p>
-  <pre><code>-- Migration: 0012_cloud_sources
-ALTER TABLE sources ADD COLUMN uri         TEXT;
-ALTER TABLE sources ADD COLUMN type        TEXT NOT NULL DEFAULT 'local';
-ALTER TABLE sources ADD COLUMN provider    TEXT;
-ALTER TABLE sources ADD COLUMN bucket      TEXT;
-ALTER TABLE sources ADD COLUMN object_key  TEXT;
-
-CREATE INDEX idx_sources_type     ON sources (type);
-CREATE INDEX idx_sources_provider ON sources (provider)
-  WHERE provider IS NOT NULL;</code></pre>
+  <pre><code>-- Migration: 017
+ALTER TABLE sources ADD COLUMN cloud_uri TEXT;</code></pre>
 </DocsLayout>

@@ -17,11 +17,10 @@ Authorization: Bearer &lt;token&gt;
 Content-Type: application/json
 
 &#123;
-  "source_duration_seconds": 3600,
-  "source_size_bytes": 15728640000,
-  "source_codec": "h264",
-  "source_resolution": "1920x1080",
-  "template_id": "hevc-4k-hdr"
+  "source_id": "src-abc123",
+  "codec": "hevc",
+  "preset_name": "hevc-4k-hdr",
+  "chunk_count": 12
 &#125;</code></pre>
 
   <table>
@@ -29,11 +28,10 @@ Content-Type: application/json
       <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>source_duration_seconds</code></td><td>float</td><td>Yes</td><td>Duration of the source material in seconds</td></tr>
-      <tr><td><code>source_size_bytes</code></td><td>int</td><td>No</td><td>File size of the source in bytes; improves bitrate-based estimates</td></tr>
-      <tr><td><code>source_codec</code></td><td>string</td><td>No</td><td>Source video codec (e.g. <code>h264</code>, <code>vp9</code>, <code>prores</code>)</td></tr>
-      <tr><td><code>source_resolution</code></td><td>string</td><td>No</td><td>Source resolution as <code>WxH</code> (e.g. <code>1920x1080</code>)</td></tr>
-      <tr><td><code>template_id</code></td><td>string</td><td>Yes</td><td>ID of the encoding template to use for the estimate</td></tr>
+      <tr><td><code>source_id</code></td><td>string</td><td>Yes</td><td>ID of the source file registered in the system</td></tr>
+      <tr><td><code>codec</code></td><td>string</td><td>Yes</td><td>Target codec (e.g. <code>hevc</code>, <code>h264</code>, <code>av1</code>)</td></tr>
+      <tr><td><code>preset_name</code></td><td>string</td><td>Yes</td><td>Name of the encoding preset to use for the estimate</td></tr>
+      <tr><td><code>chunk_count</code></td><td>int</td><td>No</td><td>Number of chunks the job will be split into; used to refine parallel estimates</td></tr>
     </tbody>
   </table>
 
@@ -41,11 +39,9 @@ Content-Type: application/json
   <pre><code># Response 200 OK:
 &#123;
   "estimated_duration_seconds": 2340,
-  "estimated_cost_credits": 47.2,
+  "estimated_duration_human": "39m 0s",
   "confidence": "high",
-  "based_on_samples": 83,
-  "template_id": "hevc-4k-hdr",
-  "notes": "Estimate based on 83 completed jobs with similar source characteristics."
+  "based_on_samples": 83
 &#125;</code></pre>
 
   <table>
@@ -54,11 +50,9 @@ Content-Type: application/json
     </thead>
     <tbody>
       <tr><td><code>estimated_duration_seconds</code></td><td>int</td><td>Predicted wall-clock encoding time in seconds</td></tr>
-      <tr><td><code>estimated_cost_credits</code></td><td>float</td><td>Predicted cost in EncodeSwarmr credits (if billing is configured)</td></tr>
+      <tr><td><code>estimated_duration_human</code></td><td>string</td><td>Human-readable duration string (e.g. <code>39m 0s</code>)</td></tr>
       <tr><td><code>confidence</code></td><td>string</td><td>Confidence level: <code>high</code>, <code>medium</code>, <code>low</code>, or <code>none</code></td></tr>
       <tr><td><code>based_on_samples</code></td><td>int</td><td>Number of historical job samples used to generate the estimate</td></tr>
-      <tr><td><code>template_id</code></td><td>string</td><td>The template the estimate was computed for</td></tr>
-      <tr><td><code>notes</code></td><td>string</td><td>Human-readable explanation of the confidence level or any caveats</td></tr>
     </tbody>
   </table>
 
@@ -68,8 +62,8 @@ Content-Type: application/json
       <tr><th>Level</th><th>Sample Threshold</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>high</strong></td><td>≥ 50 samples</td><td>Strong historical data for this template and source characteristics; estimate is reliable within ±15%</td></tr>
-      <tr><td><strong>medium</strong></td><td>10–49 samples</td><td>Moderate historical data; estimate may vary by ±30%</td></tr>
+      <tr><td><strong>high</strong></td><td>≥ 30 samples</td><td>Strong historical data for this template and source characteristics; estimate is reliable within ±15%</td></tr>
+      <tr><td><strong>medium</strong></td><td>10–29 samples</td><td>Moderate historical data; estimate may vary by ±30%</td></tr>
       <tr><td><strong>low</strong></td><td>1–9 samples</td><td>Limited data; treat the estimate as a rough guide only</td></tr>
       <tr><td><strong>none</strong></td><td>0 samples</td><td>No historical data for this template; the Controller falls back to a formula-based estimate with no reliability guarantee</td></tr>
     </tbody>

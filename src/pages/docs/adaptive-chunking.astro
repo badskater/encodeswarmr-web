@@ -14,21 +14,21 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <h2>How Adaptive Chunking Works</h2>
   <ol>
     <li>
-      <strong>Baseline FPS measurement</strong> — The Controller reads the source frame rate via MediaInfo. For variable-frame-rate (VFR) sources it uses the average frame rate reported over the first 60 seconds of content.
+      <strong>Baseline FPS</strong> — The Controller queries each agent's historical average FPS from its metrics store. This per-agent value reflects real-world throughput on the agent's hardware rather than the source's native frame rate.
     </li>
     <li>
-      <strong>Target duration formula</strong> — The target chunk duration in seconds is computed as:
-      <pre><code>target_duration = target_frames / fps</code></pre>
-      where <code>target_frames</code> is a configurable parameter (default: <code>1800</code> frames, giving ~60 s at 30 fps or ~75 s at 24 fps).
+      <strong>Target duration formula</strong> — The number of frames per chunk is calculated as:
+      <pre><code>chunk_frames = round(agent_avg_fps * target_chunk_duration)</code></pre>
+      where <code>target_chunk_duration</code> is the configured target duration in seconds (default: <code>120</code>). Each agent may therefore receive differently-sized chunks based on its own measured throughput.
     </li>
     <li>
-      <strong>Boundary alignment</strong> — If scene detection data is available, the nearest scene cut within ±15 s of each calculated boundary is used instead. This avoids splitting mid-scene and improves visual quality at segment joins.
+      <strong>Boundary alignment</strong> — If scene detection data is available, the nearest scene cut within the <code>scene_snap_tolerance</code> frame window of each calculated boundary is used instead. This avoids splitting mid-scene and improves visual quality at segment joins.
     </li>
     <li>
-      <strong>Min/max enforcement</strong> — After alignment, any chunk shorter than <code>min_chunk_seconds</code> is merged with its neighbour, and any chunk longer than <code>max_chunk_seconds</code> is force-split at the raw calculated boundary (ignoring scene alignment for that split only).
+      <strong>Min/max enforcement</strong> — After alignment, any chunk below <code>min_chunk_frames</code> is merged with its neighbour, and any chunk above <code>max_chunk_frames</code> is force-split at the raw calculated boundary (ignoring scene alignment for that split only).
     </li>
     <li>
-      <strong>Rebalancing</strong> — The final chunk list is rebalanced so that the last chunk is never shorter than 50% of the target duration. If it would be, its frames are distributed to the preceding chunk.
+      <strong>chunk_boundaries ignored</strong> — When <code>adaptive_chunking</code> is <code>true</code>, any manually specified <code>chunk_boundaries</code> field in the job configuration is ignored. The adaptive algorithm takes full control of boundary placement.
     </li>
   </ol>
 
@@ -61,7 +61,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr>
         <td>Configuration</td>
         <td>Single <code>chunk_seconds</code> value</td>
-        <td><code>target_frames</code>, <code>min_chunk_seconds</code>, <code>max_chunk_seconds</code>, scene window</td>
+        <td><code>target_chunk_duration</code>, <code>min_chunk_frames</code>, <code>max_chunk_frames</code>, <code>scene_snap_tolerance</code></td>
       </tr>
       <tr>
         <td>Requires scene detection</td>
@@ -78,17 +78,14 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
   <h2>Configuration</h2>
   <p>
-    Adaptive chunking is configured per-flow on the <code>ChunkedEncode</code> node, or globally in the Controller configuration file. The following JSON represents the full configuration object:
+    Adaptive chunking is configured per-job or per-flow on the <code>Chunk Split</code> node, or globally in the Controller configuration file. The following JSON represents the full configuration object:
   </p>
   <pre><code>&#123;
-  "chunking": &#123;
-    "mode": "adaptive",
-    "target_frames": 1800,
-    "min_chunk_seconds": 20,
-    "max_chunk_seconds": 180,
-    "scene_alignment_window_seconds": 15,
-    "rebalance_tail": true
-  &#125;
+  "adaptive_chunking": true,
+  "target_chunk_duration": 120,
+  "min_chunk_frames": 500,
+  "max_chunk_frames": 10000,
+  "scene_snap_tolerance": 30
 &#125;</code></pre>
 
   <table>
@@ -97,56 +94,49 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     </thead>
     <tbody>
       <tr>
-        <td><code>mode</code></td>
-        <td>string</td>
-        <td><code>"adaptive"</code></td>
-        <td><code>"adaptive"</code> or <code>"fixed"</code>. When <code>"fixed"</code>, only <code>chunk_seconds</code> is used.</td>
-      </tr>
-      <tr>
-        <td><code>target_frames</code></td>
-        <td>integer</td>
-        <td><code>1800</code></td>
-        <td>Target number of frames per chunk. The duration in seconds varies by FPS.</td>
-      </tr>
-      <tr>
-        <td><code>min_chunk_seconds</code></td>
-        <td>integer</td>
-        <td><code>20</code></td>
-        <td>Minimum allowed chunk duration. Shorter chunks are merged with their neighbour.</td>
-      </tr>
-      <tr>
-        <td><code>max_chunk_seconds</code></td>
-        <td>integer</td>
-        <td><code>180</code></td>
-        <td>Maximum allowed chunk duration. Longer chunks are force-split regardless of scene boundaries.</td>
-      </tr>
-      <tr>
-        <td><code>scene_alignment_window_seconds</code></td>
-        <td>integer</td>
-        <td><code>15</code></td>
-        <td>Search radius (±seconds) around each calculated boundary when looking for a scene cut to align to.</td>
-      </tr>
-      <tr>
-        <td><code>rebalance_tail</code></td>
+        <td><code>adaptive_chunking</code></td>
         <td>boolean</td>
-        <td><code>true</code></td>
-        <td>When true, the final chunk is merged with its predecessor if it would be shorter than 50% of the target duration.</td>
+        <td><code>false</code></td>
+        <td>Enables adaptive chunking. When <code>true</code>, the <code>chunk_boundaries</code> field is ignored and the algorithm determines all boundaries.</td>
+      </tr>
+      <tr>
+        <td><code>target_chunk_duration</code></td>
+        <td>integer</td>
+        <td><code>120</code></td>
+        <td>Target duration in seconds for each chunk. Used with the agent's average FPS to calculate <code>chunk_frames</code>.</td>
+      </tr>
+      <tr>
+        <td><code>min_chunk_frames</code></td>
+        <td>integer</td>
+        <td><code>500</code></td>
+        <td>Minimum allowed chunk size in frames. Chunks below this threshold are merged with their neighbour.</td>
+      </tr>
+      <tr>
+        <td><code>max_chunk_frames</code></td>
+        <td>integer</td>
+        <td><code>10000</code></td>
+        <td>Maximum allowed chunk size in frames. Chunks above this threshold are force-split regardless of scene boundaries.</td>
+      </tr>
+      <tr>
+        <td><code>scene_snap_tolerance</code></td>
+        <td>integer</td>
+        <td><code>30</code></td>
+        <td>Search window in frames around each calculated boundary when looking for a scene cut to align to.</td>
       </tr>
     </tbody>
   </table>
 
   <h2>Global Defaults</h2>
   <p>
-    You can set global chunking defaults in the Controller's YAML configuration file. Per-flow node settings override the global defaults.
+    You can set global adaptive chunking defaults under <code>engine.adaptive_chunking_defaults</code> in the Controller's YAML configuration file. Per-flow node settings override the global defaults.
   </p>
-  <pre><code>controller:
-  chunking:
-    mode: adaptive
-    target_frames: 1800
-    min_chunk_seconds: 20
-    max_chunk_seconds: 180
-    scene_alignment_window_seconds: 15
-    rebalance_tail: true</code></pre>
+  <pre><code>engine:
+  adaptive_chunking_defaults:
+    adaptive_chunking: true
+    target_chunk_duration: 120
+    min_chunk_frames: 500
+    max_chunk_frames: 10000
+    scene_snap_tolerance: 30</code></pre>
 
   <h2>Min/Max Chunk Sizes Explained</h2>
   <p>

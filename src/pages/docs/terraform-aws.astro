@@ -14,7 +14,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
                          └──────────────┬──────────────┘
                                         │
                     ┌───────────────────▼───────────────────┐
-                    │            VPC  10.0.0.0/16            │
+                    │            VPC  10.10.0.0/16            │
                     │                                        │
                     │   Public Subnets (AZ-a, AZ-b)         │
                     │  ┌──────────────────────────────┐      │
@@ -50,7 +50,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     </thead>
     <tbody>
       <tr><td>Controller</td><td>1 × EC2 instance</td><td>2 × EC2 instances (Multi-AZ)</td></tr>
-      <tr><td>Load Balancer</td><td>ALB + NLB</td><td>ALB + NLB (multi-AZ)</td></tr>
+      <tr><td>Load Balancer</td><td>0 (none)</td><td>ALB + NLB (multi-AZ)</td></tr>
       <tr><td>Database</td><td>RDS Single-AZ</td><td>RDS Multi-AZ with standby</td></tr>
       <tr><td>Agent scaling</td><td>ASG in single AZ</td><td>ASG across 2 AZs</td></tr>
       <tr><td>EFS</td><td>Standard</td><td>One Zone (or Standard)</td></tr>
@@ -88,7 +88,7 @@ terraform apply</code></pre>
 encodeswarmr_version = "1.2.0"
 
 # VPC
-vpc_cidr             = "10.0.0.0/16"
+vpc_cidr             = "10.10.0.0/16"
 availability_zones   = ["us-east-1a", "us-east-1b"]
 
 # Controller
@@ -177,12 +177,10 @@ aws ssm start-session \
       <tr><td>Controller EC2</td><td>1 × t3.large (On-Demand)</td><td>~$60</td></tr>
       <tr><td>Agent EC2</td><td>2 × c6i.4xlarge (On-Demand)</td><td>~$550</td></tr>
       <tr><td>RDS PostgreSQL</td><td>db.t3.medium, 20 GB gp3</td><td>~$30</td></tr>
-      <tr><td>ALB</td><td>1 load balancer</td><td>~$20</td></tr>
-      <tr><td>NLB</td><td>1 load balancer</td><td>~$18</td></tr>
       <tr><td>EFS</td><td>100 GB standard</td><td>~$30</td></tr>
       <tr><td>NAT Gateway</td><td>1</td><td>~$35</td></tr>
       <tr><td>Data transfer</td><td>variable</td><td>~$20</td></tr>
-      <tr><td><strong>Total</strong></td><td></td><td><strong>~$763/mo</strong></td></tr>
+      <tr><td><strong>Total</strong></td><td></td><td><strong>~$725/mo</strong></td></tr>
     </tbody>
   </table>
 

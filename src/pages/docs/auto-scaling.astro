@@ -10,23 +10,25 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 
   <h2>How Auto-Scaling Hooks Work</h2>
   <ol>
-    <li>The Controller continuously monitors queue depth and the number of connected agents.</li>
-    <li>When queue depth divided by agents exceeds the <code>scale_up_threshold</code>, the Controller fires a <code>scale_up</code> webhook to your endpoint requesting <code>desired_agents</code> additional agents.</li>
-    <li>When queue depth divided by agents falls below the <code>scale_down_threshold</code> and a cooldown period has elapsed, the Controller fires a <code>scale_down</code> webhook.</li>
+    <li>The Controller continuously monitors queue depth (absolute pending task count) and the number of connected agents.</li>
+    <li>When the number of pending tasks exceeds the <code>scale_up_threshold</code> (absolute count), the Controller fires a <code>scale_up</code> webhook to your endpoint.</li>
+    <li>When the number of pending tasks falls below the <code>scale_down_threshold</code> and a cooldown period has elapsed, the Controller fires a <code>scale_down</code> webhook.</li>
     <li>Your endpoint provisions or deprovisions agents and returns HTTP 200. The Controller applies a cooldown window before firing the next scale event to prevent flapping.</li>
   </ol>
 
   <h2>Configuration</h2>
-  <p>Add the <code>auto_scaling</code> block to <code>controller.yaml</code>:</p>
-  <pre><code>auto_scaling:
+  <p>Add the <code>autoscaling</code> block to <code>controller.yaml</code>:</p>
+  <pre><code>autoscaling:
   enabled: true
   webhook_url: https://infra.example.com/hooks/encodeswarmr-scale
-  secret: my-scaling-secret          # HMAC-SHA256 secret (same header as webhooks)
-  scale_up_threshold: 5              # jobs per agent ratio to trigger scale-up
-  scale_down_threshold: 1            # jobs per agent ratio to trigger scale-down
+  secret: my-scaling-secret          # HMAC-SHA256 secret
+  scale_up_threshold: 50             # pending tasks count to trigger scale-up
+  scale_down_threshold: 10           # pending tasks count to trigger scale-down
+  scale_up_step: 2                   # number of agents to add per scale-up event
+  scale_down_step: 1                 # number of agents to remove per scale-down event
   min_agents: 1                      # never scale below this count
   max_agents: 20                     # never request above this count
-  cooldown_seconds: 120              # minimum seconds between consecutive scale events</code></pre>
+  cooldown: 5m                       # minimum duration between consecutive scale events</code></pre>
 
   <table>
     <thead>
@@ -35,34 +37,42 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     <tbody>
       <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Master switch for auto-scaling</td></tr>
       <tr><td><code>webhook_url</code></td><td>string</td><td>—</td><td>HTTP(S) endpoint that receives scale events</td></tr>
-      <tr><td><code>secret</code></td><td>string</td><td>—</td><td>HMAC-SHA256 signing secret; sent in <code>X-EncodeSwarmr-Signature</code></td></tr>
-      <tr><td><code>scale_up_threshold</code></td><td>int</td><td><code>5</code></td><td>Queue depth per agent ratio above which to scale up</td></tr>
-      <tr><td><code>scale_down_threshold</code></td><td>int</td><td><code>1</code></td><td>Queue depth per agent ratio below which to scale down</td></tr>
+      <tr><td><code>secret</code></td><td>string</td><td>—</td><td>HMAC-SHA256 signing secret; sent in <code>X-Signature-256</code></td></tr>
+      <tr><td><code>scale_up_threshold</code></td><td>int</td><td><code>50</code></td><td>Absolute pending task count above which to scale up</td></tr>
+      <tr><td><code>scale_down_threshold</code></td><td>int</td><td><code>10</code></td><td>Absolute pending task count below which to scale down</td></tr>
+      <tr><td><code>scale_up_step</code></td><td>int</td><td><code>2</code></td><td>Number of agents to add per scale-up event</td></tr>
+      <tr><td><code>scale_down_step</code></td><td>int</td><td><code>1</code></td><td>Number of agents to remove per scale-down event</td></tr>
       <tr><td><code>min_agents</code></td><td>int</td><td><code>1</code></td><td>Lower bound; Controller never requests fewer than this</td></tr>
       <tr><td><code>max_agents</code></td><td>int</td><td><code>20</code></td><td>Upper bound; Controller never requests more than this</td></tr>
-      <tr><td><code>cooldown_seconds</code></td><td>int</td><td><code>120</code></td><td>Minimum seconds between consecutive scale events</td></tr>
+      <tr><td><code>cooldown</code></td><td>duration</td><td><code>5m</code></td><td>Minimum duration between consecutive scale events</td></tr>
     </tbody>
   </table>
 
   <h2>Webhook Payload Format</h2>
-  <p>All scale events are delivered as <code>POST</code> requests with a JSON body and the <code>X-EncodeSwarmr-Signature</code> HMAC header.</p>
+  <p>All scale events are delivered as <code>POST</code> requests with a JSON body and the <code>X-Signature-256</code> HMAC header.</p>
 
   <h3>scale_up payload</h3>
   <pre><code>&#123;
-  "event": "scale_up",
-  "current_agents": 2,
-  "desired_agents": 5,
-  "queue_depth": 18,
-  "timestamp": "2025-06-01T14:32:00Z"
+  "action": "scale_up",
+  "pending_tasks": 72,
+  "active_agents": 3,
+  "idle_agents": 0,
+  "suggested_add": 2,
+  "min_agents": 1,
+  "max_agents": 20,
+  "fired_at": "2025-06-01T14:32:00Z"
 &#125;</code></pre>
 
   <h3>scale_down payload</h3>
   <pre><code>&#123;
-  "event": "scale_down",
-  "current_agents": 8,
-  "desired_agents": 3,
-  "queue_depth": 1,
-  "timestamp": "2025-06-01T16:10:00Z"
+  "action": "scale_down",
+  "pending_tasks": 4,
+  "active_agents": 8,
+  "idle_agents": 5,
+  "suggested_remove": 3,
+  "min_agents": 1,
+  "max_agents": 20,
+  "fired_at": "2025-06-01T16:10:00Z"
 &#125;</code></pre>
 
   <table>
@@ -70,11 +80,15 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Field</th><th>Type</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>event</code></td><td>string</td><td><code>scale_up</code> or <code>scale_down</code></td></tr>
-      <tr><td><code>current_agents</code></td><td>int</td><td>Number of agents currently connected to the Controller</td></tr>
-      <tr><td><code>desired_agents</code></td><td>int</td><td>Total agent count the Controller wants after the scaling action</td></tr>
-      <tr><td><code>queue_depth</code></td><td>int</td><td>Number of jobs currently waiting in the queue</td></tr>
-      <tr><td><code>timestamp</code></td><td>string</td><td>ISO 8601 UTC timestamp of the event</td></tr>
+      <tr><td><code>action</code></td><td>string</td><td><code>scale_up</code> or <code>scale_down</code></td></tr>
+      <tr><td><code>pending_tasks</code></td><td>int</td><td>Number of pending (queued) tasks at the time of firing</td></tr>
+      <tr><td><code>active_agents</code></td><td>int</td><td>Number of agents currently connected and processing work</td></tr>
+      <tr><td><code>idle_agents</code></td><td>int</td><td>Number of agents connected but not processing any task</td></tr>
+      <tr><td><code>suggested_add</code></td><td>int</td><td>Suggested number of agents to add (scale_up only)</td></tr>
+      <tr><td><code>suggested_remove</code></td><td>int</td><td>Suggested number of agents to remove (scale_down only)</td></tr>
+      <tr><td><code>min_agents</code></td><td>int</td><td>Configured minimum agent count</td></tr>
+      <tr><td><code>max_agents</code></td><td>int</td><td>Configured maximum agent count</td></tr>
+      <tr><td><code>fired_at</code></td><td>string</td><td>ISO 8601 UTC timestamp of the event</td></tr>
     </tbody>
   </table>
 
@@ -110,7 +124,10 @@ NAMESPACE   = "encoding"
 @app.route("/hooks/encodeswarmr-scale", methods=["POST"])
 def handle_scale():
     payload = request.get_json()
-    desired = payload["desired_agents"]
+    action = payload["action"]
+    suggested = payload.get("suggested_add") or payload.get("suggested_remove", 0)
+    current = payload["active_agents"]
+    desired = (current + suggested) if action == "scale_up" else max(1, current - suggested)
     apps_v1.patch_namespaced_deployment_scale(
         name=DEPLOYMENT,
         namespace=NAMESPACE,
@@ -123,7 +140,11 @@ def handle_scale():
 # Simple example using jq + AWS CLI inside a Lambda or EC2-hosted receiver
 
 PAYLOAD=$(cat)
-DESIRED=$(echo "$PAYLOAD" | jq -r '.desired_agents')
+ACTION=$(echo "$PAYLOAD" | jq -r '.action')
+CURRENT=$(echo "$PAYLOAD" | jq -r '.active_agents')
+ADD=$(echo "$PAYLOAD" | jq -r '.suggested_add // 0')
+REMOVE=$(echo "$PAYLOAD" | jq -r '.suggested_remove // 0')
+DESIRED=$(( ACTION == "scale_up" ? CURRENT + ADD : CURRENT - REMOVE ))
 ASG_NAME="encodeswarmr-agents"
 
 aws autoscaling set-desired-capacity \
@@ -138,17 +159,18 @@ echo '&#123;"status":"ok"&#125;'</code></pre>
 # Minimal receiver that logs the event and delegates to a Nomad job
 
 PAYLOAD=$(cat)
-EVENT=$(echo "$PAYLOAD" | jq -r '.event')
-DESIRED=$(echo "$PAYLOAD" | jq -r '.desired_agents')
+ACTION=$(echo "$PAYLOAD" | jq -r '.action')
+ADD=$(echo "$PAYLOAD" | jq -r '.suggested_add // 0')
+REMOVE=$(echo "$PAYLOAD" | jq -r '.suggested_remove // 0')
 
-echo "$(date -u +%FT%TZ) scale event=$EVENT desired=$DESIRED" \
+echo "$(date -u +%FT%TZ) scale action=$ACTION add=$ADD remove=$REMOVE" \
   &gt;&gt; /var/log/encodeswarmr-scaling.log
 
-nomad job scale encodeswarmr-agent "$DESIRED"</code></pre>
+nomad job scale encodeswarmr-agent "$&#123;ADD:-$REMOVE&#125;"</code></pre>
 
   <h2>Cooldown Behaviour</h2>
   <p>
-    After any scale event is fired, the Controller enters a cooldown period of <code>cooldown_seconds</code>. During this window:
+    After any scale event is fired, the Controller enters a cooldown period of <code>cooldown</code>. During this window:
   </p>
   <ul>
     <li>No further scale_up or scale_down events are emitted, regardless of queue depth changes.</li>
@@ -156,7 +178,7 @@ nomad job scale encodeswarmr-agent "$DESIRED"</code></pre>
     <li>The cooldown is intentionally shared between scale_up and scale_down to prevent oscillation.</li>
   </ul>
   <p>
-    Set <code>cooldown_seconds</code> to at least as long as it takes your infrastructure to provision a new agent and have it connect to the Controller; otherwise the Controller may fire multiple scale-up events before agents arrive.
+    Set <code>cooldown</code> to at least as long as it takes your infrastructure to provision a new agent and have it connect to the Controller; otherwise the Controller may fire multiple scale-up events before agents arrive.
   </p>
 
   <h2>Signature Verification</h2>
@@ -167,7 +189,7 @@ from flask import request, abort
 SCALING_SECRET = "my-scaling-secret"
 
 def verify_scaling_request():
-    sig_header = request.headers.get("X-EncodeSwarmr-Signature", "")
+    sig_header = request.headers.get("X-Signature-256", "")
     body = request.get_data()
     expected = "sha256=" + hmac.new(
         SCALING_SECRET.encode(), body, hashlib.sha256

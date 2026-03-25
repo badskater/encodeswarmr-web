@@ -11,77 +11,87 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <h2>Built-in Presets</h2>
   <table>
     <thead>
-      <tr><th>Preset Name</th><th>Video Codec</th><th>HDR</th><th>Target Bitrate / CRF</th><th>Use Case</th></tr>
+      <tr><th>Preset Name</th><th>Video Codec</th><th>CRF</th><th>Container</th><th>HDR</th><th>Use Case</th></tr>
     </thead>
     <tbody>
       <tr>
-        <td><code>4k-hdr10-quality</code></td>
-        <td>x265 (HEVC)</td>
-        <td>HDR10</td>
-        <td>CRF 18, slow preset</td>
+        <td><code>4K HDR10 x265 Quality</code></td>
+        <td>x265</td>
+        <td>18</td>
+        <td>mkv</td>
+        <td>Yes</td>
         <td>Archival 4K HDR10 — maximum quality, large file size.</td>
       </tr>
       <tr>
-        <td><code>4k-hdr10-balanced</code></td>
-        <td>x265 (HEVC)</td>
-        <td>HDR10</td>
-        <td>CRF 22, medium preset</td>
+        <td><code>4K HDR10 x265 Balanced</code></td>
+        <td>x265</td>
+        <td>20</td>
+        <td>mkv</td>
+        <td>Yes</td>
         <td>Balanced 4K HDR10 — good quality with moderate encode time.</td>
       </tr>
       <tr>
-        <td><code>1080p-x265-quality</code></td>
-        <td>x265 (HEVC)</td>
-        <td>SDR</td>
-        <td>CRF 20, slow preset</td>
+        <td><code>1080p x265 Quality</code></td>
+        <td>x265</td>
+        <td>18</td>
+        <td>mkv</td>
+        <td>No</td>
         <td>High-quality 1080p HEVC for long-term storage.</td>
       </tr>
       <tr>
-        <td><code>1080p-x265-fast</code></td>
-        <td>x265 (HEVC)</td>
-        <td>SDR</td>
-        <td>CRF 24, fast preset</td>
+        <td><code>1080p x265 Fast</code></td>
+        <td>x265</td>
+        <td>22</td>
+        <td>mkv</td>
+        <td>No</td>
         <td>Quick turnaround 1080p HEVC. Slightly larger than quality variant.</td>
       </tr>
       <tr>
-        <td><code>1080p-x264</code></td>
-        <td>x264 (H.264)</td>
-        <td>SDR</td>
-        <td>CRF 20, medium preset</td>
+        <td><code>1080p x264 Compatible</code></td>
+        <td>x264</td>
+        <td>18</td>
+        <td>mkv</td>
+        <td>No</td>
         <td>Broad compatibility 1080p H.264. Works on virtually every device.</td>
       </tr>
       <tr>
-        <td><code>web-h264</code></td>
-        <td>x264 (H.264)</td>
-        <td>SDR</td>
-        <td>ABR 4 Mbps, Main profile</td>
-        <td>Web streaming H.264. Constrained bitrate for adaptive streaming ladders.</td>
+        <td><code>Web Optimized H.264</code></td>
+        <td>x264</td>
+        <td>23</td>
+        <td>mp4</td>
+        <td>No</td>
+        <td>Web streaming H.264. Optimised for broad browser and device compatibility.</td>
       </tr>
       <tr>
-        <td><code>web-av1</code></td>
+        <td><code>Web Optimized AV1</code></td>
         <td>SVT-AV1</td>
-        <td>SDR</td>
-        <td>CRF 32, preset 6</td>
+        <td>30</td>
+        <td>mp4</td>
+        <td>No</td>
         <td>Modern web delivery with AV1. Smaller files than H.264 at equivalent quality.</td>
       </tr>
       <tr>
-        <td><code>archive-lossless</code></td>
-        <td>FFV1</td>
-        <td>SDR</td>
-        <td>Lossless</td>
+        <td><code>Archive Lossless</code></td>
+        <td>x264</td>
+        <td>0 (lossless)</td>
+        <td>mkv</td>
+        <td>No</td>
         <td>Bit-exact preservation. Very large files; intended for mezzanine archival.</td>
       </tr>
       <tr>
-        <td><code>dolby-vision</code></td>
-        <td>x265 (HEVC)</td>
-        <td>Dolby Vision</td>
-        <td>CRF 20, slow preset</td>
+        <td><code>Dolby Vision x265</code></td>
+        <td>x265</td>
+        <td>18</td>
+        <td>mkv</td>
+        <td>DV 8.1</td>
         <td>Dolby Vision profile 8.1 with HDR10 cross-compatibility track. Requires DV-capable source.</td>
       </tr>
       <tr>
-        <td><code>hdr10plus</code></td>
-        <td>x265 (HEVC)</td>
+        <td><code>HDR10+ x265</code></td>
+        <td>x265</td>
+        <td>18</td>
+        <td>mkv</td>
         <td>HDR10+</td>
-        <td>CRF 20, slow preset</td>
         <td>HDR10+ with dynamic metadata. Extracts and re-injects HDR10+ SEI from source.</td>
       </tr>
     </tbody>

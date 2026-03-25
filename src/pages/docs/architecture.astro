@@ -46,7 +46,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     <li><strong>Priority FIFO scheduling</strong> — jobs carry an integer priority; within the same priority the queue is first-in, first-out. The scheduler matches jobs to capable agents based on codec requirements and GPU availability.</li>
     <li><strong>Adaptive chunked encoding</strong> — the Controller splits long sources into segments and distributes chunks across multiple agents in parallel, then concatenates the output.</li>
     <li><strong>Offline resilience</strong> — agents maintain a local SQLite journal; they can survive a Controller outage and resume reporting when connectivity is restored.</li>
-    <li><strong>Template-driven script generation</strong> — AviSynth and VapourSynth filter scripts are generated from Jinja-style templates, allowing custom filter chains per preset.</li>
+    <li><strong>Template-driven script generation</strong> — AviSynth and VapourSynth filter scripts are generated from Go <code>text/template</code> templates with custom functions, allowing per-source variable injection and custom filter chains.</li>
     <li><strong>Real-time WebSocket events</strong> — all job state transitions, agent heartbeats, and log lines are broadcast over WebSocket so the React dashboard updates without polling.</li>
     <li><strong>Plugin-based codec system</strong> — encoding backends are Go interface implementations registered at startup, making it straightforward to add new codecs.</li>
     <li><strong>Prometheus metrics</strong> — the Controller and each Agent expose <code>/metrics</code> endpoints compatible with Prometheus scraping and the included Grafana dashboards.</li>
@@ -61,29 +61,22 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 │   ├── controller/        # Controller binary entrypoint
 │   └── agent/             # Agent binary entrypoint
 ├── internal/
-│   ├── api/               # REST API handlers (Gin)
-│   ├── agent/             # Agent gRPC client and job runner
-│   ├── controller/        # Controller gRPC server
-│   ├── db/                # PostgreSQL migrations and queries (sqlc)
-│   ├── job/               # Job queue, scheduler, and state machine
-│   ├── plugin/            # Codec plugin registry and built-in plugins
-│   ├── template/          # AviSynth / VapourSynth script templating
-│   ├── tracing/           # OpenTelemetry setup helpers
-│   └── webhook/           # Outbound webhook dispatcher
-├── proto/                 # gRPC / protobuf definitions
-├── web/                   # React SPA source (Vite + TypeScript)
-│   ├── src/
-│   │   ├── components/    # Shared UI components
-│   │   ├── context/       # React contexts (Branding, Auth, WS)
-│   │   ├── pages/         # Route-level page components
-│   │   └── api/           # API client helpers
-│   └── dist/              # Built frontend (embedded in binary)
-├── grafana/               # Pre-built Grafana dashboard JSON files
+│   ├── agent/             # Agent service, runner, GPU, progress, offline store
+│   ├── controller/        # API, engine, scheduler, webhooks, auth, plugins, presets
+│   ├── db/                # PostgreSQL migrations and query layer (pgx)
+│   └── proto/             # gRPC service definitions
+├── proto/                 # Protobuf source files
+├── api/                   # OpenAPI spec and SDK generation configs
+├── web/                   # React 19 + Vite 8 static build
+├── configs/               # Example YAML configs
 ├── deploy/
 │   ├── ansible/           # Ansible roles and playbooks
 │   ├── terraform/         # Terraform modules (AWS, Azure, GCP)
-│   ├── kubernetes/        # Helm chart
-│   └── docker-compose.yml # Quick-start compose file
-├── docs/                  # Additional documentation
+│   └── helm/              # Kubernetes Helm chart
+├── deployments/           # Dockerfile, docker-compose, Patroni
+├── scripts/               # Install scripts (controller + agent)
+├── installer/             # Windows Inno Setup installer
+├── tests/integration/     # 3-layer integration test suite
+├── docs/                  # ADRs, Grafana, capacity planning, HA, cloud storage
 └── Makefile</code></pre>
 </DocsLayout>

@@ -209,8 +209,8 @@ CREATE TABLE IF NOT EXISTS sync_checkpoints (
 -- Persisted job context so the agent can resume after a process restart.
 CREATE TABLE IF NOT EXISTS active_jobs (
     job_id       TEXT    PRIMARY KEY,
-    assignment   BLOB    NOT NULL,         -- serialised protobuf JobAssignment
-    state        TEXT    NOT NULL,         -- PREPARING | ENCODING | REPORTING
+    assignment   BLOB    NOT NULL,         -- serialised protobuf TaskAssignment
+    state        TEXT    NOT NULL,         -- VALIDATING | RUNNING | REPORTING
     pid          INTEGER,                  -- encoder process PID (NULL if not running)
     started_at   INTEGER NOT NULL,
     updated_at   INTEGER NOT NULL
@@ -252,16 +252,16 @@ CREATE TABLE IF NOT EXISTS active_jobs (
 
   <h3>Script Location and Execution</h3>
   <p>
-    The controller bundles the encode script inside the <code>JobAssignment</code> protobuf message. The agent writes it to a temporary file inside the job's work directory before execution.
+    The <code>TaskAssignment</code> contains the UNC path to the chunk's script directory, not the script content itself. The agent reads the script from the shared path at execution time.
   </p>
   <p>Protobuf message (simplified):</p>
-  <pre><code>message JobAssignment &#123;
+  <pre><code>message TaskAssignment &#123;
   string   job_id         = 1;
   string   template_id    = 2;
   string   input_path     = 3;
   string   output_path    = 4;
-  bytes    script         = 5;  // raw encode script content
-  string   script_name    = 6;  // filename hint, e.g. "encode.bat" or "encode.sh"
+  string   script_dir     = 5;  // UNC path to chunk directory containing the script
+  string   script_type    = 6;  // "avs" or "vpy"
   map&lt;string,string&gt; variables = 7;  // template variable substitutions
   GpuSpec  gpu            = 8;
   int64    estimated_size_bytes = 9;
@@ -282,10 +282,8 @@ CREATE TABLE IF NOT EXISTS active_jobs (
   <pre><code>// Simplified from internal/agent/executor.go
 
 func (e *Executor) run(ctx context.Context, job *JobContext) error &#123;
-    scriptPath := filepath.Join(job.WorkDir, job.Assignment.ScriptName)
-    if err := os.WriteFile(scriptPath, job.Assignment.Script, 0700); err != nil &#123;
-        return fmt.Errorf("write script: %w", err)
-    &#125;
+    // Script lives in the UNC script directory provided by the TaskAssignment
+    scriptPath := filepath.Join(job.Assignment.ScriptDir, "encode."+job.Assignment.ScriptType)
 
     var cmd *exec.Cmd
     switch runtime.GOOS &#123;
@@ -293,7 +291,7 @@ func (e *Executor) run(ctx context.Context, job *JobContext) error &#123;
         // Run inside cmd.exe with /D (disable AutoRun) and restricted environment
         cmd = exec.CommandContext(ctx, "cmd.exe", "/D", "/C", scriptPath)
     default:
-        cmd = exec.CommandContext(ctx, "/bin/bash", "-eu", scriptPath)
+        cmd = exec.CommandContext(ctx, "/bin/sh", scriptPath)
     &#125;
 
     cmd.Dir = job.WorkDir
@@ -496,9 +494,9 @@ func IsAllowedPath(path string, allowedShares []string) bool &#123;
 
   <h3>Health Endpoint</h3>
   <p>
-    The agent exposes a lightweight HTTP health endpoint on <code>localhost:8081</code> (not accessible from the network by default). The controller polls this from the same host during smoke tests and post-upgrade validation.
+    The agent exposes a lightweight HTTP health endpoint on <code>localhost:9080</code> (not accessible from the network by default). The controller polls this from the same host during smoke tests and post-upgrade validation.
   </p>
-  <pre><code>GET http://localhost:8081/health
+  <pre><code>GET http://localhost:9080/health
 
 &#123;
   "status":    "ok",

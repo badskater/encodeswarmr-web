@@ -41,14 +41,14 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 ┌─────────────┐
 │    Audio    │  job_3  (LoudnessAnalyse → AudioNormalise)
 └──────┬──────┘
-       │ depends_on: [job_1]
+       │ depends_on: [job_2]
        ▼
 ┌─────────────┐
 │    Merge    │  job_4  (AudioMerge + FileOutput)
 └─────────────┘
        │ depends_on: [job_2, job_3]</code></pre>
   <p>
-    Jobs 2 and 3 both depend only on job 1, so they can run in parallel once analysis completes. Job 4 waits for both jobs 2 and 3 before the merge step runs.
+    Job 2 (Encode) depends on job 1 (Analysis). Job 3 (Audio) depends on the encode completing. Job 4 (Merge) waits for both jobs 2 and 3 before the merge step runs.
   </p>
 
   <h2>API Reference</h2>
@@ -61,32 +61,32 @@ Content-Type: application/json
   "chain_group": "movie-2024-encode",
   "jobs": [
     &#123;
-      "id": "job_1",
-      "name": "Analysis",
-      "flow": "analyse-hdr",
+      "ref": "job_1",
+      "job_type": "analyse",
+      "encode_config": &#123; "flow": "analyse-hdr" &#125;,
       "source_id": "src_abc123",
-      "depends_on": []
+      "depends_on_refs": []
     &#125;,
     &#123;
-      "id": "job_2",
-      "name": "Video Encode",
-      "flow": "encode-4k-hdr10",
+      "ref": "job_2",
+      "job_type": "encode",
+      "encode_config": &#123; "flow": "encode-4k-hdr10" &#125;,
       "source_id": "src_abc123",
-      "depends_on": ["job_1"]
+      "depends_on_refs": ["job_1"]
     &#125;,
     &#123;
-      "id": "job_3",
-      "name": "Audio Normalise",
-      "flow": "audio-r128",
+      "ref": "job_3",
+      "job_type": "encode",
+      "encode_config": &#123; "flow": "audio-r128" &#125;,
       "source_id": "src_abc123",
-      "depends_on": ["job_1"]
+      "depends_on_refs": ["job_2"]
     &#125;,
     &#123;
-      "id": "job_4",
-      "name": "Merge",
-      "flow": "merge-output",
+      "ref": "job_4",
+      "job_type": "encode",
+      "encode_config": &#123; "flow": "merge-output" &#125;,
       "source_id": "src_abc123",
-      "depends_on": ["job_2", "job_3"]
+      "depends_on_refs": ["job_2", "job_3"]
     &#125;
   ]
 &#125;</code></pre>
@@ -152,28 +152,28 @@ HTTP/1.1 200 OK
   </p>
   <table>
     <thead>
-      <tr><th>Preset Name</th><th>Category</th><th>Notes</th></tr>
+      <tr><th>FFmpeg Codec</th><th>Preset Name</th><th>Category</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>aac_stereo</code></td><td>AAC</td><td>2-channel AAC-LC at 192 kbps. Broad device compatibility.</td></tr>
-      <tr><td><code>aac_51</code></td><td>AAC</td><td>5.1 AAC-LC at 384 kbps.</td></tr>
-      <tr><td><code>aac_he</code></td><td>AAC</td><td>HE-AAC for low-bitrate streaming. Stereo at 64 kbps.</td></tr>
-      <tr><td><code>opus_stereo</code></td><td>Opus</td><td>Opus stereo at 128 kbps. Recommended for web delivery.</td></tr>
-      <tr><td><code>opus_51</code></td><td>Opus</td><td>Opus 5.1 at 256 kbps.</td></tr>
-      <tr><td><code>ac3_51</code></td><td>Dolby AC-3</td><td>AC-3 5.1 at 448 kbps. Standard for Blu-ray compatibility.</td></tr>
-      <tr><td><code>eac3_51</code></td><td>Dolby E-AC-3</td><td>E-AC-3 (Dolby Digital Plus) 5.1 at 384 kbps.</td></tr>
-      <tr><td><code>eac3_atmos</code></td><td>Dolby Atmos</td><td>E-AC-3 JOC with Atmos metadata. Requires Atmos-capable source.</td></tr>
-      <tr><td><code>dts_core</code></td><td>DTS</td><td>DTS core 5.1 at 1509 kbps.</td></tr>
-      <tr><td><code>dts_hd_ma</code></td><td>DTS-HD</td><td>DTS-HD Master Audio lossless. Requires lossless input.</td></tr>
-      <tr><td><code>truehd_atmos</code></td><td>Dolby TrueHD</td><td>TrueHD with Atmos object metadata. Lossless; large file overhead.</td></tr>
-      <tr><td><code>flac_stereo</code></td><td>FLAC</td><td>Lossless FLAC stereo. Archive/mezzanine use.</td></tr>
-      <tr><td><code>pcm_stereo</code></td><td>PCM</td><td>Uncompressed 24-bit PCM stereo. Mezzanine or editing use only.</td></tr>
+      <tr><td><code>flac</code></td><td>FLAC Lossless</td><td>lossless</td><td>Lossless, archival</td></tr>
+      <tr><td><code>pcm_s24le</code></td><td>PCM 24-bit</td><td>lossless</td><td>Uncompressed 24-bit</td></tr>
+      <tr><td><code>copy</code></td><td>TrueHD (Dolby Atmos passthrough)</td><td>lossless</td><td>Pass-through only</td></tr>
+      <tr><td><code>libopus</code></td><td>Opus 128k</td><td>stereo</td><td>128 kbps streaming</td></tr>
+      <tr><td><code>libopus</code></td><td>Opus 320k</td><td>stereo</td><td>320 kbps transparent</td></tr>
+      <tr><td><code>aac</code></td><td>AAC-LC 256k</td><td>stereo</td><td>Broad compatibility</td></tr>
+      <tr><td><code>libfdk_aac</code></td><td>AAC-HE v2 64k</td><td>stereo</td><td>Low-bitrate streaming</td></tr>
+      <tr><td><code>libmp3lame</code></td><td>MP3 320k</td><td>legacy</td><td>Maximum compatibility</td></tr>
+      <tr><td><code>libvorbis</code></td><td>Vorbis 192k</td><td>legacy</td><td>Open-source streaming</td></tr>
+      <tr><td><code>ac3</code></td><td>AC3 640k (Dolby Digital)</td><td>surround</td><td>Blu-ray compatible</td></tr>
+      <tr><td><code>eac3</code></td><td>EAC3 1536k (Dolby Digital Plus)</td><td>surround</td><td>High-quality surround</td></tr>
+      <tr><td><code>dca</code></td><td>DTS 1536k</td><td>surround</td><td>AV receiver DTS</td></tr>
+      <tr><td><code>aac</code></td><td>(custom bitrate audio job)</td><td>stereo</td><td>Configurable via API</td></tr>
     </tbody>
   </table>
 
   <h2>Cancellation Behaviour</h2>
   <p>
-    Cancelling a chain group cancels all jobs in that group that are not already in a terminal state (<code>completed</code>, <code>failed</code>, <code>cancelled</code>). Jobs that are currently <code>running</code> receive a cancel signal; the agent stops encoding, cleans up temporary chunk files, and reports <code>cancelled</code> back to the Controller.
+    Cancelling a chain group cancels all jobs in that group that are not already in a terminal state (<code>completed</code>, <code>failed</code>, <code>cancelled</code>). Jobs that are currently <code>running</code> are not interrupted — only downstream jobs in the <code>waiting</code> state are cancelled.
   </p>
   <p>
     You can also cancel a single job within a chain. If the cancelled job has dependents that are still <code>waiting</code>, they are auto-cancelled via the cascade described above. If the cancelled job has no dependents in <code>waiting</code> state, only the target job is affected.

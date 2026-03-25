@@ -15,16 +15,12 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 Content-Type: application/json
 
 &#123;
-  "root_path": "/mnt/media/library",
-  "pattern": "**/*.mkv",
+  "path_pattern": "/mnt/media/library/**/*.mkv",
   "recursive": true,
   "auto_analyze": true,
   "auto_encode": false,
-  "unc_to_nfs": &#123;
-    "\\\\nas01\\media": "/mnt/media"
-  &#125;,
-  "tags": ["library", "2024-import"],
-  "priority": 5
+  "encode_template_id": "tmpl_abc123",
+  "path_mapping": "nas-nfs"
 &#125;</code></pre>
 
   <table>
@@ -33,22 +29,16 @@ Content-Type: application/json
     </thead>
     <tbody>
       <tr>
-        <td><code>root_path</code></td>
+        <td><code>path_pattern</code></td>
         <td>string</td>
         <td>Yes</td>
-        <td>Absolute path (local or UNC) to the directory to scan. The scanner starts here and applies the pattern relative to this root.</td>
-      </tr>
-      <tr>
-        <td><code>pattern</code></td>
-        <td>string</td>
-        <td>No</td>
-        <td>Glob pattern relative to <code>root_path</code>. Defaults to <code>**/*</code> (all files, all depths). See glob syntax table below.</td>
+        <td>A single glob pattern identifying the files to import (e.g., <code>/mnt/media/**/*.mkv</code>). The pattern is evaluated on the Controller's filesystem.</td>
       </tr>
       <tr>
         <td><code>recursive</code></td>
         <td>boolean</td>
         <td>No</td>
-        <td>When <code>true</code> (default), descends into subdirectories. When <code>false</code>, only the immediate children of <code>root_path</code> are considered.</td>
+        <td>When <code>true</code> (default), descends into subdirectories matched by the glob. When <code>false</code>, only files in the direct parent directory are considered.</td>
       </tr>
       <tr>
         <td><code>auto_analyze</code></td>
@@ -60,31 +50,19 @@ Content-Type: application/json
         <td><code>auto_encode</code></td>
         <td>boolean</td>
         <td>No</td>
-        <td>When <code>true</code>, submits an encoding job for each file using the flow or preset specified in <code>encode_config</code>. Requires <code>encode_config</code> to be provided.</td>
+        <td>When <code>true</code>, submits an encoding job for each file using the template specified by <code>encode_template_id</code>. Requires <code>encode_template_id</code> to be provided.</td>
       </tr>
       <tr>
-        <td><code>encode_config</code></td>
-        <td>object</td>
+        <td><code>encode_template_id</code></td>
+        <td>string</td>
         <td>Conditional</td>
-        <td>Required when <code>auto_encode</code> is <code>true</code>. Contains <code>flow</code> or <code>preset</code>, <code>output_path_template</code>, and optional <code>agent_tags</code>.</td>
+        <td>ID of the encode template to use when <code>auto_encode</code> is <code>true</code>.</td>
       </tr>
       <tr>
-        <td><code>unc_to_nfs</code></td>
-        <td>object</td>
+        <td><code>path_mapping</code></td>
+        <td>string</td>
         <td>No</td>
-        <td>Map of UNC path prefixes to NFS mount point equivalents. Applied to discovered paths before storage. See path translation section.</td>
-      </tr>
-      <tr>
-        <td><code>tags</code></td>
-        <td>string[]</td>
-        <td>No</td>
-        <td>Array of tag strings applied to every registered source. Useful for grouping batch imports for later filtering.</td>
-      </tr>
-      <tr>
-        <td><code>priority</code></td>
-        <td>integer</td>
-        <td>No</td>
-        <td>Job priority (1–10) applied to any auto-submitted jobs. Default: <code>5</code>.</td>
+        <td>Name of a configured path mapping to apply to discovered paths before storage (e.g., to translate between UNC and NFS representations).</td>
       </tr>
     </tbody>
   </table>
@@ -92,13 +70,12 @@ Content-Type: application/json
   <p>Successful response:</p>
   <pre><code>HTTP/1.1 202 Accepted
 &#123;
-  "import_id": "bimport_xyz789",
+  "import_id": "imp_xyz789",
   "status": "scanning",
-  "root_path": "/mnt/media/library",
-  "pattern": "**/*.mkv",
-  "files_discovered": 0,
-  "files_registered": 0,
-  "files_skipped": 0,
+  "path_pattern": "/mnt/media/library/**/*.mkv",
+  "files_found": 0,
+  "sources_created": 0,
+  "sources_skipped": 0,
   "created_at": "2024-11-14T10:00:00Z"
 &#125;</code></pre>
 
@@ -107,13 +84,12 @@ Content-Type: application/json
 
 HTTP/1.1 200 OK
 &#123;
-  "import_id": "bimport_xyz789",
+  "import_id": "imp_xyz789",
   "status": "completed",
-  "root_path": "/mnt/media/library",
-  "pattern": "**/*.mkv",
-  "files_discovered": 1247,
-  "files_registered": 1239,
-  "files_skipped": 8,
+  "path_pattern": "/mnt/media/library/**/*.mkv",
+  "files_found": 1247,
+  "sources_created": 1239,
+  "sources_skipped": 8,
   "skip_reasons": &#123;
     "already_registered": 5,
     "below_min_size": 2,

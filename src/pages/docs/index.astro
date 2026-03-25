@@ -102,6 +102,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     </thead>
     <tbody>
       <tr><td><a href="/docs/architecture">Architecture</a></td><td>System overview, component diagram, and repository layout</td></tr>
+      <tr><td><a href="/docs/agents">Agents</a></td><td>Authoritative technical reference for the EncodeSwarmr Agent</td></tr>
       <tr><td><a href="/docs/adr">ADR Index</a></td><td>Architecture Decision Records explaining key design choices</td></tr>
       <tr><td><a href="/docs/roadmap">Roadmap</a></td><td>Planned features and improvements by phase</td></tr>
     </tbody>
@@ -145,10 +146,10 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
     </thead>
     <tbody>
-      <tr><td>Controller backend</td><td>Go 1.22+</td><td>REST API, gRPC server, scheduler, template engine</td></tr>
-      <tr><td>Agent backend</td><td>Go 1.22+</td><td>gRPC client, job runner, codec plugin host</td></tr>
-      <tr><td>Web frontend</td><td>React 18 + TypeScript + Vite</td><td>Dashboard SPA embedded in the Controller binary</td></tr>
-      <tr><td>Database</td><td>PostgreSQL 16</td><td>Controller state: jobs, agents, presets, users</td></tr>
+      <tr><td>Controller backend</td><td>Go 1.25+</td><td>REST API, gRPC server, scheduler, template engine</td></tr>
+      <tr><td>Agent backend</td><td>Go 1.25+</td><td>gRPC client, job runner, codec plugin host</td></tr>
+      <tr><td>Web frontend</td><td>React 19 + Vite 8 (embedded via embed.FS)</td><td>Dashboard SPA embedded in the Controller binary</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16+ with pgx</td><td>Controller state: jobs, agents, presets, users</td></tr>
       <tr><td>Agent journal</td><td>SQLite</td><td>Offline-resilient local job state on each Agent</td></tr>
       <tr><td>Transport</td><td>gRPC + Protocol Buffers</td><td>Controller-Agent communication over mTLS</td></tr>
       <tr><td>Observability</td><td>Prometheus + OpenTelemetry</td><td>Metrics scraping and distributed tracing</td></tr>

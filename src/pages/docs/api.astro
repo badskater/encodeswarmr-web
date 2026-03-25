@@ -12,14 +12,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <p>
     All successful responses wrap their payload in a standard envelope:
   </p>
-  <pre><code>&#123;
-  "data": &#123; ... &#125;,         // The requested resource or collection
-  "meta": &#123;               // Present on list responses
-    "total": 1247,
-    "limit": 50,
-    "next_cursor": "eyJpZCI6MTAwfQ=="
-  &#125;
-&#125;</code></pre>
+  <pre><code>&#123; "data": &#123; ... &#125;, "meta": &#123; "request_id": "..." &#125; &#125;</code></pre>
   <p>
     Error responses follow RFC 9457 (Problem Details for HTTP APIs):
   </p>
@@ -37,11 +30,11 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Group</th><th>Base Path</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>auth</strong></td><td><code>/api/v1/auth</code></td><td>Login, logout, OIDC token exchange, session refresh.</td></tr>
+      <tr><td><strong>auth</strong></td><td><code>/auth</code></td><td>Login, logout, OIDC token exchange, session refresh.</td></tr>
       <tr><td><strong>sources</strong></td><td><code>/api/v1/sources</code></td><td>Register, list, and delete media source files. Includes batch import sub-resource.</td></tr>
       <tr><td><strong>jobs</strong></td><td><code>/api/v1/jobs</code></td><td>Create, list, get, cancel, and retry encoding jobs. Includes live log streaming and chunk progress.</td></tr>
       <tr><td><strong>agents</strong></td><td><code>/api/v1/agents</code></td><td>List agents, get agent details, disable, approve, and push upgrades.</td></tr>
-      <tr><td><strong>analysis</strong></td><td><code>/api/v1/sources/&#123;id&#125;/analysis</code></td><td>Retrieve MediaInfo, HDR metadata, and loudness results for an analysed source.</td></tr>
+      <tr><td><strong>analysis</strong></td><td><code>/api/v1/analysis</code></td><td>Retrieve MediaInfo, HDR metadata, and loudness results for an analysed source.</td></tr>
       <tr><td><strong>webhooks</strong></td><td><code>/api/v1/webhooks</code></td><td>Create and manage outbound webhook subscriptions and view delivery history.</td></tr>
       <tr><td><strong>variables</strong></td><td><code>/api/v1/variables</code></td><td>Global key-value store accessible from flow nodes and templates.</td></tr>
       <tr><td><strong>templates</strong></td><td><code>/api/v1/templates</code></td><td>Create and manage job templates that bundle source patterns, flows, and output rules.</td></tr>
@@ -49,9 +42,9 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><td><strong>presets</strong></td><td><code>/api/v1/presets</code></td><td>List, create, update, and delete encoding presets.</td></tr>
       <tr><td><strong>plugins</strong></td><td><code>/api/v1/plugins</code></td><td>List installed plugins, install from registry, enable/disable, and view plugin logs.</td></tr>
       <tr><td><strong>api-keys</strong></td><td><code>/api/v1/api-keys</code></td><td>Generate and revoke API keys with scoped permissions.</td></tr>
-      <tr><td><strong>notifications</strong></td><td><code>/api/v1/notifications</code></td><td>Manage notification channels (email, Slack, Pushover) and view notification history.</td></tr>
+      <tr><td><strong>notifications</strong></td><td><code>/api/v1/me/notifications</code></td><td>Manage notification channels (email, Slack, Pushover) and view notification history.</td></tr>
       <tr><td><strong>estimate</strong></td><td><code>/api/v1/estimate</code></td><td>Request cost and time estimates for a job before submission.</td></tr>
-      <tr><td><strong>upgrade</strong></td><td><code>/api/v1/upgrade</code></td><td>Check for Controller updates, view changelog, and apply upgrades.</td></tr>
+      <tr><td><strong>upgrade</strong></td><td><code>/api/v1/agent/upgrade/check</code></td><td>Agent self-upgrade check: query available versions and initiate upgrade.</td></tr>
     </tbody>
   </table>
 
@@ -61,7 +54,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   </p>
 
   <h3>1. Authenticate</h3>
-  <pre><code>curl -X POST https://controller/api/v1/auth/login \
+  <pre><code>curl -X POST https://controller/auth/login \
   -H "Content-Type: application/json" \
   -d '&#123;"username":"admin","password":"changeme"&#125;' \
   -c cookies.txt
@@ -104,7 +97,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 &#125;</code></pre>
 
   <h3>4. Stream Live Logs</h3>
-  <pre><code>curl -N https://controller/api/v1/jobs/job_xyz/logs/stream \
+  <pre><code>curl -N https://controller/api/v1/jobs/&lt;job-uuid&gt;/log/stream \
   -b cookies.txt \
   -H "Accept: text/event-stream"
 

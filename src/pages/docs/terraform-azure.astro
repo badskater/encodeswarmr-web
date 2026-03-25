@@ -26,7 +26,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
                     │  │  Private Subnet  10.0.2.0/24   │   │
                     │  │  ┌──────────▼──────────────┐   │   │
                     │  │  │  Linux VM: Controller    │   │   │
-                    │  │  │  (Standard_D2s_v3)       │   │   │
+                    │  │  │  (Standard_D2s_v5)       │   │   │
                     │  │  │  (+ 2nd VM in HA mode)   │   │   │
                     │  │  └──────────┬───────────────┘  │   │
                     │  │             │                   │   │
@@ -86,7 +86,7 @@ resource_group_name  = "encodeswarmr-rg"
 encodeswarmr_version = "1.2.0"
 
 # Controller
-controller_vm_size   = "Standard_D2s_v3"
+controller_vm_size   = "Standard_D2s_v5"
 
 # Agents
 agent_vm_size        = "Standard_F8s_v2"
@@ -144,7 +144,7 @@ terraform apply -var="ha_enabled=false" -var="controller_count=1" -var="db_zone_
       <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
     </thead>
     <tbody>
-      <tr><td>Controller VM</td><td>Standard_D2s_v3 (On-Demand)</td><td>~$70</td></tr>
+      <tr><td>Controller VM</td><td>Standard_D2s_v5 (On-Demand)</td><td>~$70</td></tr>
       <tr><td>Agent VMSS</td><td>2 × Standard_F8s_v2</td><td>~$560</td></tr>
       <tr><td>Azure DB PostgreSQL</td><td>Standard_D2ds_v4, 32 GB</td><td>~$105</td></tr>
       <tr><td>Load Balancer</td><td>Standard</td><td>~$20</td></tr>
@@ -161,7 +161,7 @@ terraform apply -var="ha_enabled=false" -var="controller_count=1" -var="db_zone_
       <tr><th>Component</th><th>Spec</th><th>Est. Monthly Cost</th></tr>
     </thead>
     <tbody>
-      <tr><td>Controller VMs</td><td>2 × Standard_D2s_v3</td><td>~$140</td></tr>
+      <tr><td>Controller VMs</td><td>2 × Standard_D2s_v5</td><td>~$140</td></tr>
       <tr><td>Agent VMSS</td><td>4 × Standard_F8s_v2</td><td>~$1,120</td></tr>
       <tr><td>Azure DB PostgreSQL</td><td>Standard_D2ds_v4, Zone-redundant</td><td>~$210</td></tr>
       <tr><td>Load Balancer</td><td>Standard (zone-redundant)</td><td>~$25</td></tr>

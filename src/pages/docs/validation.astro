@@ -14,35 +14,33 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
       <tr><th>Check</th><th>Description</th><th>Configurable</th></tr>
     </thead>
     <tbody>
-      <tr><td>File exists</td><td>Output file is present and non-empty at the expected path</td><td>No (always run)</td></tr>
+      <tr><td>File exists</td><td>Output file is present at the expected path</td><td>No (always run)</td></tr>
+      <tr><td>File readable</td><td>Output file can be opened and read by ffprobe</td><td>No (always run)</td></tr>
       <tr><td>Video stream present</td><td>At least one video stream is detected by ffprobe</td><td>Yes (<code>require_video_stream</code>)</td></tr>
+      <tr><td>Codec match</td><td>The output video codec matches the expected codec from the template</td><td>Yes (<code>require_codec_match</code>)</td></tr>
       <tr><td>Duration ratio</td><td>Output duration is within a configurable ratio of the source duration</td><td>Yes (<code>duration_ratio_min</code>)</td></tr>
-      <tr><td>Minimum file size</td><td>Output file is larger than a configurable minimum byte count</td><td>Yes (<code>min_size_bytes</code>)</td></tr>
-      <tr><td>No corrupt frames</td><td>ffprobe reports zero decode errors in the first N frames</td><td>Yes (<code>frame_check_count</code>)</td></tr>
     </tbody>
   </table>
 
   <h2>Configuration</h2>
   <p>Add the <code>validation</code> block to <code>controller.yaml</code>:</p>
   <pre><code>validation:
-  enabled: true
-  ffprobe_path: /usr/bin/ffprobe   # path to the ffprobe binary on each agent
+  enabled: false
+  ffprobe_bin: /usr/bin/ffprobe    # path to the ffprobe binary on each agent
   require_video_stream: true
-  duration_ratio_min: 0.95         # output must be at least 95% of source duration
-  min_size_bytes: 102400           # 100 KiB minimum output size
-  frame_check_count: 100           # check first 100 frames for decode errors</code></pre>
+  require_codec_match: true
+  duration_ratio_min: 0.95         # output must be at least 95% of source duration</code></pre>
 
   <table>
     <thead>
       <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>enabled</code></td><td>bool</td><td><code>true</code></td><td>Master switch for output validation</td></tr>
-      <tr><td><code>ffprobe_path</code></td><td>string</td><td><code>ffprobe</code></td><td>Absolute path to ffprobe; defaults to PATH lookup</td></tr>
+      <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Master switch for output validation</td></tr>
+      <tr><td><code>ffprobe_bin</code></td><td>string</td><td><code>ffprobe</code></td><td>Absolute path to ffprobe; defaults to PATH lookup</td></tr>
       <tr><td><code>require_video_stream</code></td><td>bool</td><td><code>true</code></td><td>Fail validation if no video stream is found in the output</td></tr>
+      <tr><td><code>require_codec_match</code></td><td>bool</td><td><code>true</code></td><td>Fail validation if the output codec does not match the template codec</td></tr>
       <tr><td><code>duration_ratio_min</code></td><td>float</td><td><code>0.95</code></td><td>Minimum acceptable ratio of output duration to source duration</td></tr>
-      <tr><td><code>min_size_bytes</code></td><td>int</td><td><code>102400</code></td><td>Minimum acceptable output file size in bytes</td></tr>
-      <tr><td><code>frame_check_count</code></td><td>int</td><td><code>100</code></td><td>Number of frames to probe for decode errors (0 to disable)</td></tr>
     </tbody>
   </table>
 
@@ -66,9 +64,8 @@ Content-Type: application/json
   "template_id": "aac-192k",
   "validation": &#123;
     "require_video_stream": false,
-    "duration_ratio_min": 0.98,
-    "min_size_bytes": 50000,
-    "frame_check_count": 0
+    "require_codec_match": false,
+    "duration_ratio_min": 0.98
   &#125;
 &#125;</code></pre>
   <p>Per-job settings take precedence over the global <code>controller.yaml</code> configuration. To disable validation entirely for a single job, set <code>"enabled": false</code> in the per-job <code>validation</code> object.</p>
@@ -79,7 +76,7 @@ Content-Type: application/json
   </p>
   <pre><code># agent.yaml
 validation:
-  ffprobe_path: /usr/local/bin/ffprobe</code></pre>
+  ffprobe_bin: /usr/local/bin/ffprobe</code></pre>
   <p>
     The agent reports its ffprobe version to the Controller at registration time. The Controller logs a warning if an agent's ffprobe version is older than the minimum supported version (currently 4.3).
   </p>
@@ -98,7 +95,7 @@ validation:
   <p>If an agent logs <code>validation: ffprobe not found at /usr/bin/ffprobe</code>:</p>
   <ul>
     <li>Install ffmpeg/ffprobe on the agent: <code>apt install ffmpeg</code> or <code>brew install ffmpeg</code>.</li>
-    <li>Or update <code>ffprobe_path</code> in <code>agent.yaml</code> to point to the correct binary location.</li>
+    <li>Or update <code>ffprobe_bin</code> in <code>agent.yaml</code> to point to the correct binary location.</li>
   </ul>
 
   <h3>Duration ratio check failing</h3>
@@ -106,7 +103,6 @@ validation:
   <ul>
     <li>Check whether the source file has a reliable duration header; some containers (MKV, MPEG-TS) may report inaccurate durations.</li>
     <li>Lower <code>duration_ratio_min</code> (e.g. to <code>0.90</code>) if small duration discrepancies are acceptable for your content.</li>
-    <li>Use <code>"frame_check_count": 0</code> and rely on file-size and stream-present checks instead.</li>
   </ul>
 
   <h3>No video stream detected</h3>

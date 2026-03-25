@@ -38,7 +38,7 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <ul>
     <li>Ansible 2.15 or later</li>
     <li>Python packages: <code>psycopg2-binary</code>, <code>pywinrm</code> (for Windows agents), <code>boto3</code> (optional, for dynamic inventory)</li>
-    <li>Ansible collections: <code>community.general</code>, <code>community.postgresql</code>, <code>ansible.windows</code></li>
+    <li>Ansible collections: <code>ansible.windows</code>, <code>ansible.posix</code>, <code>community.postgresql</code></li>
     <li>SSH access to all Linux target hosts (key-based recommended)</li>
     <li>WinRM configured on all Windows agent hosts (see Windows section)</li>
   </ul>
@@ -47,13 +47,13 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
 pip install ansible psycopg2-binary pywinrm
 
 # Install required Ansible collections
-ansible-galaxy collection install community.general community.postgresql ansible.windows</code></pre>
+ansible-galaxy collection install ansible.windows ansible.posix community.postgresql</code></pre>
 
   <h3>Other Requirements</h3>
   <ul>
     <li>All target hosts must be able to reach the controller on ports <strong>8080</strong> and <strong>9443</strong></li>
     <li>Shared NFS/SMB storage mounted at the same path on controller and all Linux agents</li>
-    <li>PostgreSQL 15+ accessible from the controller host (can be managed by Ansible or external)</li>
+    <li>PostgreSQL 16+ accessible from the controller host (can be managed by Ansible or external)</li>
   </ul>
 
   <h2>Quick Start — Standard Deployment</h2>
